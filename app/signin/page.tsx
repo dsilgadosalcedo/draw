@@ -47,8 +47,8 @@ function getUserFriendlyError(
     normalizedMessage.includes("invalid account id")
   ) {
     return flow === "signIn"
-      ? "Invalid email or password. Please check your credentials and try again."
-      : "An account with this email already exists. Please sign in instead."
+      ? "Invalid username or password. Please check your credentials and try again."
+      : "An account with this username already exists. Please sign in instead."
   }
 
   if (
@@ -56,7 +56,7 @@ function getUserFriendlyError(
     normalizedMessage.includes("invalid email") ||
     normalizedMessage.includes("invalid password")
   ) {
-    return "Invalid email or password. Please check your credentials and try again."
+    return "Invalid username or password. Please check your credentials and try again."
   }
 
   if (
@@ -64,7 +64,7 @@ function getUserFriendlyError(
     normalizedMessage.includes("already exists") ||
     normalizedMessage.includes("account already exists")
   ) {
-    return "An account with this email already exists. Please sign in instead."
+    return "An account with this username already exists. Please sign in instead."
   }
 
   if (
@@ -73,7 +73,7 @@ function getUserFriendlyError(
     normalizedMessage.includes("account not found")
   ) {
     return flow === "signIn"
-      ? "No account found with this email. Please sign up first."
+      ? "No account found with this username. Please sign up first."
       : "An error occurred. Please try again."
   }
 
@@ -86,7 +86,7 @@ function getUserFriendlyError(
   }
 
   if (normalizedMessage.includes("email")) {
-    return "Please enter a valid email address."
+    return "Please enter a valid username."
   }
 
   // Generic fallback
@@ -139,9 +139,9 @@ export default function SignIn() {
             }}
           >
             <Input
-              type="email"
+              type="text"
               name="email"
-              placeholder="Email"
+              placeholder="Username"
               required
               className="px-5 py-6 text-lg rounded-2xl"
             />
