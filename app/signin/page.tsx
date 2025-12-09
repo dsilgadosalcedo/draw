@@ -1,26 +1,21 @@
-"use client";
+"use client"
 
-import { useAuthActions } from "@convex-dev/auth/react";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import Image from "next/image";
+import { useAuthActions } from "@convex-dev/auth/react"
+import { useRouter } from "next/navigation"
+import { useState } from "react"
+import Image from "next/image"
 
 export default function SignIn() {
-  const { signIn } = useAuthActions();
-  const [flow, setFlow] = useState<"signIn" | "signUp">("signIn");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const router = useRouter();
+  const { signIn } = useAuthActions()
+  const [flow, setFlow] = useState<"signIn" | "signUp">("signIn")
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const router = useRouter()
   return (
     <div className="flex flex-col gap-8 w-full max-w-lg mx-auto h-screen justify-center items-center px-4">
       <div className="text-center flex flex-col items-center gap-4">
         <div className="flex items-center gap-6">
-          <Image
-            src="/convex.svg"
-            alt="Convex Logo"
-            width={90}
-            height={90}
-          />
+          <Image src="/app.svg" alt="App Logo" width={90} height={90} />
           <div className="w-px h-20 bg-slate-300 dark:bg-slate-600"></div>
           <Image
             src="/nextjs-icon-light-background.svg"
@@ -48,20 +43,20 @@ export default function SignIn() {
       <form
         className="flex flex-col gap-4 w-full bg-slate-100 dark:bg-slate-800 p-8 rounded-2xl shadow-xl border border-slate-300 dark:border-slate-600"
         onSubmit={(e) => {
-          e.preventDefault();
-          setLoading(true);
-          setError(null);
-          const formData = new FormData(e.target as HTMLFormElement);
-          formData.set("flow", flow);
+          e.preventDefault()
+          setLoading(true)
+          setError(null)
+          const formData = new FormData(e.target as HTMLFormElement)
+          formData.set("flow", flow)
           void signIn("password", formData)
             .catch((error) => {
-              setError(error.message);
-              setLoading(false);
+              setError(error.message)
+              setLoading(false)
             })
             .then(() => {
               // Redirect to home, which will auto-redirect to latest drawing
-              router.push("/");
-            });
+              router.push("/")
+            })
         }}
       >
         <input
@@ -115,5 +110,5 @@ export default function SignIn() {
         )}
       </form>
     </div>
-  );
+  )
 }

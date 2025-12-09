@@ -10,10 +10,15 @@ import {
   Plus,
   Pencil,
   PanelLeftCloseIcon,
-  PanelRightCloseIcon
+  PanelRightCloseIcon,
+  LogOut,
+  LineSquiggleIcon
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "./ui/input"
+import { useAuthActions } from "@convex-dev/auth/react"
+import { useRouter } from "next/navigation"
+import Image from "next/image"
 
 export default function Sidebar() {
   const { currentDrawingId, setCurrentDrawingId } = useDrawing()
@@ -23,6 +28,17 @@ export default function Sidebar() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
+  const { signOut } = useAuthActions()
+  const router = useRouter()
+
+  const handleSignOut = async () => {
+    try {
+      await signOut()
+      router.push("/signin")
+    } catch (error) {
+      console.error("Failed to sign out:", error)
+    }
+  }
 
   const createNewDrawing = () => {
     const newId = crypto.randomUUID()
@@ -103,16 +119,22 @@ export default function Sidebar() {
       >
         <div className="flex flex-col h-full">
           {/* Header with Collapse Button & New Button */}
-          <div className="flex items-center gap-2 p-4">
-            <Button
-              onClick={() => setIsOpen(false)}
-              variant="secondary"
-              size="icon"
-              title="Collapse sidebar"
-              aria-label="Collapse sidebar"
-            >
-              <PanelLeftCloseIcon />
-            </Button>
+          <div className="flex flex-col items-center gap-2 p-4">
+            <div className="flex items-center gap-2 justify-between w-full">
+              <Button variant="ghost" size="icon">
+                <LineSquiggleIcon className="size-6" />
+              </Button>
+              <Button
+                onClick={() => setIsOpen(false)}
+                variant="secondary"
+                size="icon"
+                title="Collapse sidebar"
+                aria-label="Collapse sidebar"
+              >
+                <PanelLeftCloseIcon />
+              </Button>
+            </div>
+
             <Button onClick={createNewDrawing} className="flex-1">
               <Plus className="h-4 w-4" /> New Drawing
             </Button>
@@ -173,6 +195,18 @@ export default function Sidebar() {
               })
             )}
           </ScrollArea>
+
+          {/* Footer with Sign Out Button */}
+          <div className="p-4 border-t">
+            <Button
+              onClick={handleSignOut}
+              variant="outline"
+              className="w-full"
+            >
+              <LogOut />
+              Sign Out
+            </Button>
+          </div>
         </div>
       </div>
     </>
