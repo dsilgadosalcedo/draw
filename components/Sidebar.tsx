@@ -12,13 +12,22 @@ import {
   PanelLeftCloseIcon,
   PanelRightCloseIcon,
   LogOut,
-  LineSquiggleIcon
+  LineSquiggleIcon,
+  SearchIcon,
+  PanelLeftIcon
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "./ui/input"
 import { useAuthActions } from "@convex-dev/auth/react"
 import { useRouter } from "next/navigation"
-import Image from "next/image"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription
+} from "./ui/dialog"
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 
 export default function Sidebar() {
   const { currentDrawingId, setCurrentDrawingId } = useDrawing()
@@ -27,7 +36,10 @@ export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState("")
+  const [searchDialogOpen, setSearchDialogOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const { signOut } = useAuthActions()
   const router = useRouter()
 
@@ -94,6 +106,20 @@ export default function Sidebar() {
     }
   }, [editingId])
 
+  // Focus search input when dialog opens
+  useEffect(() => {
+    if (searchDialogOpen && searchInputRef.current) {
+      searchInputRef.current.focus()
+    }
+  }, [searchDialogOpen])
+
+  // Filter drawings based on search query
+  const filteredDrawings = drawings
+    ? drawings.filter((drawing) =>
+        drawing.name.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : []
+
   if (!drawings) return null
 
   return (
@@ -113,35 +139,48 @@ export default function Sidebar() {
       {/* Sidebar Container */}
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 bg-sidebar border-r transform transition-transform duration-300 ease-in-out",
+          "fixed inset-y-0 left-0 z-50 w-65 bg-sidebar border-r transform transition-transform duration-300 ease-in-out",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
         <div className="flex flex-col h-full">
           {/* Header with Collapse Button & New Button */}
-          <div className="flex flex-col items-center gap-2 p-4">
-            <div className="flex items-center gap-2 justify-between w-full">
+          <header className="flex flex-col items-center gap-2 py-2">
+            <div className="flex items-center gap-2 justify-between w-full px-2">
               <Button variant="ghost" size="icon">
-                <LineSquiggleIcon className="size-6" />
+                <LineSquiggleIcon className="size-5" />
               </Button>
               <Button
                 onClick={() => setIsOpen(false)}
-                variant="secondary"
+                variant="ghost"
                 size="icon"
                 title="Collapse sidebar"
                 aria-label="Collapse sidebar"
               >
-                <PanelLeftCloseIcon />
+                <PanelLeftIcon />
               </Button>
             </div>
 
-            <Button onClick={createNewDrawing} className="flex-1">
-              <Plus className="h-4 w-4" /> New Drawing
-            </Button>
-          </div>
+            <div className="px-1 w-full">
+              <Button
+                onClick={createNewDrawing}
+                className="w-full justify-start"
+                variant="ghost"
+              >
+                <Plus className="h-4 w-4" /> New drawing
+              </Button>
+              <Button
+                onClick={() => setSearchDialogOpen(true)}
+                className="w-full justify-start"
+                variant="ghost"
+              >
+                <SearchIcon /> Search drawings
+              </Button>
+            </div>
+          </header>
 
           {/* Drawing List */}
-          <ScrollArea className="flex-1 space-y-1 px-2">
+          <ScrollArea className="flex-1 space-y-1 px-1">
             {drawings.length === 0 ? (
               <div className="text-center text-sm text-gray-400 dark:text-slate-500 px-4">
                 No drawings yet
@@ -209,6 +248,53 @@ export default function Sidebar() {
           </div>
         </div>
       </div>
+
+      {/* Search Dialog */}
+      <Dialog open={searchDialogOpen} onOpenChange={setSearchDialogOpen}>
+        <DialogContent className="md:max-w-169.5 w-full h-110.5 p-0 flex flex-col">
+          <DialogHeader className="h-16 flex-row items-center px-4 border-b">
+            <VisuallyHidden>
+              <DialogTitle>Search Drawings</DialogTitle>
+            </VisuallyHidden>
+            <Input
+              ref={searchInputRef}
+              placeholder="Type to search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full border-none shadow-none focus-visible:border-none focus-visible:ring-0"
+            />
+          </DialogHeader>
+          <ScrollArea className="max-h-[356px] flex-1 px-2">
+            {filteredDrawings.length === 0 ? (
+              <div className="text-center text-sm text-muted-foreground py-8">
+                {searchQuery
+                  ? "No drawings found"
+                  : "Start typing to search..."}
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {filteredDrawings.map((drawing) => {
+                  const isActive = drawing.drawingId === currentDrawingId
+                  return (
+                    <Button
+                      key={drawing._id}
+                      onClick={() => {
+                        setCurrentDrawingId(drawing.drawingId)
+                        setSearchDialogOpen(false)
+                        setSearchQuery("")
+                      }}
+                      variant={isActive ? "secondary" : "ghost"}
+                      className="w-full justify-start"
+                    >
+                      {drawing.name}
+                    </Button>
+                  )
+                })}
+              </div>
+            )}
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
