@@ -1,33 +1,28 @@
-"use client";
+"use client"
 
-import { useConvexAuth, useQuery } from "convex/react";
-import { api } from "../convex/_generated/api";
-import { useEffect } from "react";
-import dynamic from "next/dynamic";
-import { DrawingProvider, useDrawing } from "../context/DrawingContext";
-import Sidebar from "../components/Sidebar";
-import { Button } from "@/components/ui/button";
-import Link from "next/link";
+import { useConvexAuth, useQuery } from "convex/react"
+import { api } from "../convex/_generated/api"
+import { useEffect } from "react"
+import dynamic from "next/dynamic"
+import { DrawingProvider, useDrawing } from "../context/DrawingContext"
+import Sidebar from "../components/Sidebar"
+import { Button } from "@/components/ui/button"
+import Link from "next/link"
+import Connecting from "@/components/Connecting"
 
 // 1. Dynamically import the Canvas component and disable SSR
 const Canvas = dynamic(() => import("../components/Canvas"), {
   ssr: false,
-  loading: () => (
-    <div className="flex h-full items-center justify-center">
-      <p className="text-xl text-indigo-600 dark:text-indigo-400">
-        Loading Canvas...
-      </p>
-    </div>
-  ),
-});
+  loading: () => <Connecting />
+})
 
 // --- Core Drawing Workspace Component ---
 function DrawingWorkspace() {
-  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
-  const { currentDrawingId, setCurrentDrawingId } = useDrawing();
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth()
+  const { currentDrawingId, setCurrentDrawingId } = useDrawing()
 
   // Query the latest ID only once upon initial load
-  const latestDrawingId = useQuery(api.drawings.getLatest);
+  const latestDrawingId = useQuery(api.drawings.getLatest)
 
   // --- Effect to set initial drawing ID ---
   useEffect(() => {
@@ -40,11 +35,11 @@ function DrawingWorkspace() {
     ) {
       if (latestDrawingId) {
         // Found previous work -> Load it
-        setCurrentDrawingId(latestDrawingId);
+        setCurrentDrawingId(latestDrawingId)
       } else {
         // No previous work -> Create new ID and set it (Canvas will auto-insert on save)
-        const newId = crypto.randomUUID();
-        setCurrentDrawingId(newId);
+        const newId = crypto.randomUUID()
+        setCurrentDrawingId(newId)
       }
     }
   }, [
@@ -52,20 +47,14 @@ function DrawingWorkspace() {
     isAuthenticated,
     latestDrawingId,
     currentDrawingId,
-    setCurrentDrawingId,
-  ]);
+    setCurrentDrawingId
+  ])
 
   // --- RENDER LOGIC ---
 
   // 1. Initial Load/Auth Check
   if (authLoading) {
-    return (
-      <div className="flex h-screen w-screen items-center justify-center bg-gray-50 dark:bg-slate-900">
-        <p className="text-xl text-gray-700 dark:text-slate-300">
-          Loading authentication...
-        </p>
-      </div>
-    );
+    return <Connecting />
   }
 
   // 2. Unauthenticated State
@@ -82,7 +71,7 @@ function DrawingWorkspace() {
           <Link href="/signin">Sign In to Start</Link>
         </Button>
       </div>
-    );
+    )
   }
 
   // 3. Fully Loaded Workspace
@@ -93,7 +82,7 @@ function DrawingWorkspace() {
         <Canvas />
       </main>
     </div>
-  );
+  )
 }
 
 // --- Main Export: Wrap everything in the DrawingProvider ---
@@ -102,5 +91,5 @@ export default function Home() {
     <DrawingProvider>
       <DrawingWorkspace />
     </DrawingProvider>
-  );
+  )
 }

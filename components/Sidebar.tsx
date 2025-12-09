@@ -128,7 +128,7 @@ export default function Sidebar() {
       {!isOpen && (
         <Button
           onClick={() => setIsOpen(true)}
-          variant="outline"
+          variant="secondary"
           size="icon"
           className="fixed top-4 left-15 z-40 transition-all"
         >
@@ -164,20 +164,23 @@ export default function Sidebar() {
             <div className="px-1 w-full">
               <Button
                 onClick={createNewDrawing}
-                className="w-full justify-start"
+                className="w-full justify-start font-normal"
                 variant="ghost"
               >
                 <Plus className="h-4 w-4" /> New drawing
               </Button>
               <Button
                 onClick={() => setSearchDialogOpen(true)}
-                className="w-full justify-start"
+                className="w-full justify-start font-normal"
                 variant="ghost"
               >
                 <SearchIcon /> Search drawings
               </Button>
             </div>
           </header>
+          <span className="text-sm text-muted-foreground px-4 py-1">
+            Your drawings
+          </span>
 
           {/* Drawing List */}
           <ScrollArea className="flex-1 space-y-1 px-1">
@@ -236,14 +239,14 @@ export default function Sidebar() {
           </ScrollArea>
 
           {/* Footer with Sign Out Button */}
-          <div className="p-4 border-t">
+          <div className="px-2 py-3 border-t">
             <Button
               onClick={handleSignOut}
               variant="outline"
-              className="w-full"
+              className="w-full font-normal"
             >
               <LogOut />
-              Sign Out
+              Sign out
             </Button>
           </div>
         </div>
