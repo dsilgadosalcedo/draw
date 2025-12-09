@@ -1,25 +1,18 @@
-import Home from "./inner";
-import { preloadQuery, preloadedQueryResult } from "convex/nextjs";
-import { api } from "@/convex/_generated/api";
-import Image from "next/image";
+import Home from "./inner"
+import { preloadQuery, preloadedQueryResult } from "convex/nextjs"
+import { api } from "@/convex/_generated/api"
+import Image from "next/image"
 
 export default async function ServerPage() {
-  const preloaded = await preloadQuery(api.myFunctions.listNumbers, {
-    count: 3,
-  });
+  const preloaded = await preloadQuery(api.drawings.list, {})
 
-  const data = preloadedQueryResult(preloaded);
+  const data = preloadedQueryResult(preloaded)
 
   return (
     <main className="p-8 flex flex-col gap-6 mx-auto max-w-2xl">
       <div className="flex items-center justify-center gap-4">
         <div className="flex items-center gap-4">
-          <Image
-            src="/convex.svg"
-            alt="Convex Logo"
-            width={48}
-            height={48}
-          />
+          <Image src="/convex.svg" alt="Convex Logo" width={48} height={48} />
           <div className="w-px h-12 bg-slate-300 dark:bg-slate-600"></div>
           <Image
             src="/nextjs-icon-light-background.svg"
@@ -52,5 +45,5 @@ export default async function ServerPage() {
       </div>
       <Home preloaded={preloaded} />
     </main>
-  );
+  )
 }

@@ -59,6 +59,7 @@ export default function SignIn() {
               setLoading(false);
             })
             .then(() => {
+              // Redirect to home, which will auto-redirect to latest drawing
               router.push("/");
             });
         }}
