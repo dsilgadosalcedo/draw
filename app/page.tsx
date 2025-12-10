@@ -6,8 +6,6 @@ import { useEffect } from "react"
 import dynamic from "next/dynamic"
 import { DrawingProvider, useDrawing } from "../context/DrawingContext"
 import Sidebar from "../components/Sidebar"
-import { Button } from "@/components/ui/button"
-import Link from "next/link"
 import Connecting from "@/components/Connecting"
 
 // 1. Dynamically import the Canvas component and disable SSR
@@ -59,19 +57,7 @@ function DrawingWorkspace() {
 
   // 2. Unauthenticated State
   if (!isAuthenticated) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 dark:bg-slate-900 p-4 text-center">
-        <h1 className="mb-4 text-5xl font-extrabold text-gray-900 dark:text-slate-100 tracking-tight">
-          Draw.
-        </h1>
-        <p className="mb-8 max-w-md text-lg text-gray-600 dark:text-slate-400">
-          Sign in to access your drawings immediately.
-        </p>
-        <Button asChild size="lg" className="shadow-lg">
-          <Link href="/signin">Sign In to Start</Link>
-        </Button>
-      </div>
-    )
+    return null
   }
 
   // 3. Fully Loaded Workspace

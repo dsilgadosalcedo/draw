@@ -129,3 +129,24 @@
 [data-testid*="loading"] {
   display: none !important;
 }
+
+.App-menu_top__left {
+  position: relative;
+  top: 44px !important;
+}
+
+.dropdown-menu-group {
+  display: none !important;
+}
+
+.dropdown-menu-group ~ div {
+  display: none !important;
+}
+
+.Stack.Stack_vertical.App-menu_top__left {
+  --gap: 4 !important;
+}
+
+.Island.App-menu__left {
+  max-height: 660px !important;
+}

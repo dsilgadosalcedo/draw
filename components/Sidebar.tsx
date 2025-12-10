@@ -130,7 +130,7 @@ export default function Sidebar() {
           onClick={() => setIsOpen(true)}
           variant="secondary"
           size="icon"
-          className="fixed top-4 left-15 z-40 transition-all"
+          className="fixed top-4 left-4 z-40 transition-all"
         >
           <PanelRightCloseIcon />
         </Button>
@@ -217,7 +217,7 @@ export default function Sidebar() {
                         "border-none shadow-none focus-visible:border-none focus-visible:ring-0",
                         isActive
                           ? "bg-accent cursor-default"
-                          : "group-hover:bg-secondary cursor-pointer"
+                          : "group-hover:bg-secondary dark:group-hover:bg-secondary dark:bg-transparent cursor-pointer"
                       )}
                     />
                     <Button

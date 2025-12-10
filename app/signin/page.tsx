@@ -6,6 +6,7 @@ import { useState } from "react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { LineSquiggleIcon } from "lucide-react"
 
 function getUserFriendlyError(
   error: unknown,
@@ -107,17 +108,16 @@ export default function SignIn() {
         <img
           src="/golden-ratio.jpg"
           alt=""
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover dark:opacity-20"
           aria-hidden="true"
         />
       </picture>
-      {/* Optional overlay for better readability */}
-      <div className="absolute inset-0 bg-black/20 dark:bg-black/40" />
+
       {/* Content */}
       <div className="relative grid place-items-center z-10 w-full max-w-lg mx-auto h-full justify-center items-center px-4">
-        <div className="backdrop-blur-sm flex flex-col max-w-100 min-w-100 gap-8 p-8 rounded-4xl bg-white/30 shadow-2xl">
+        <div className="backdrop-blur-sm flex flex-col max-w-100 min-w-100 gap-8 p-8 rounded-4xl bg-background/30 shadow-2xl">
           <div className="text-center flex flex-col items-center gap-4">
-            <Image src="/app.svg" alt="App Logo" width={90} height={90} />
+            <LineSquiggleIcon width={90} height={90} />
           </div>
           <form
             className="flex flex-col gap-4 w-full"
