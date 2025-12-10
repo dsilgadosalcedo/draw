@@ -25,6 +25,10 @@ import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 export default function Sidebar() {
   const { currentDrawingId, setCurrentDrawingId } = useDrawing()
   const drawings = useQuery(api.drawings.list)
+  const currentDrawing = useQuery(
+    api.drawings.get,
+    currentDrawingId ? { drawingId: currentDrawingId } : "skip"
+  )
   const updateName = useMutation(api.drawings.updateName)
   const [isOpen, setIsOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -35,6 +39,11 @@ export default function Sidebar() {
   const searchInputRef = useRef<HTMLInputElement>(null)
   const { signOut } = useAuthActions()
   const router = useRouter()
+
+  // Get the drawing theme from appState, default to "dark"
+  const drawingTheme =
+    (currentDrawing?.appState as { theme?: "light" | "dark" } | undefined)
+      ?.theme ?? "dark"
 
   const handleSignOut = async () => {
     try {
@@ -124,7 +133,12 @@ export default function Sidebar() {
           onClick={() => setIsOpen(true)}
           variant="secondary"
           size="icon"
-          className="fixed top-4 left-4 z-40 transition-all"
+          className={cn(
+            "fixed top-4 left-4 z-40 transition-all",
+            drawingTheme === "light"
+              ? "bg-[#ECECF3] text-[#1B1B1F] hover:bg-[#F1F0FF]"
+              : "bg-[#232329] text-[#E3E3E8] hover:bg-[#363541]"
+          )}
         >
           <PanelRightCloseIcon />
         </Button>
