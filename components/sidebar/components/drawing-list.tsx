@@ -14,7 +14,8 @@ import { cn } from "@/lib/utils"
 import {
   type KeyboardEvent,
   type MutableRefObject,
-  type RefObject
+  type RefObject,
+  useState
 } from "react"
 
 import { sidebarIcons } from "../constants/sidebar-constants"
@@ -58,6 +59,10 @@ export function DrawingList({
   drawingHandlers,
   onOpenNewFolderDialog
 }: DrawingListProps) {
+  const [openMenuDrawingId, setOpenMenuDrawingId] = useState<string | null>(
+    null
+  )
+
   if (!drawings || drawings.length === 0) {
     return (
       <div className="text-center text-sm text-gray-400 dark:text-slate-500 px-4">
@@ -71,6 +76,7 @@ export function DrawingList({
       {drawings.map((drawing) => {
         const isActive = drawing.drawingId === currentDrawingId
         const isEditing = editingId === drawing.drawingId
+        const isMenuOpen = openMenuDrawingId === drawing.drawingId
 
         return (
           <div key={drawing._id} className="relative group">
@@ -101,11 +107,28 @@ export function DrawingList({
                 "border-none shadow-none focus-visible:border-none focus-visible:ring-0",
                 isActive
                   ? "bg-accent cursor-default"
-                  : "group-hover:bg-secondary dark:group-hover:bg-secondary dark:bg-transparent cursor-pointer"
+                  : "group-hover:bg-secondary dark:group-hover:bg-secondary dark:bg-transparent cursor-pointer",
+                !isActive && isMenuOpen && "bg-secondary dark:bg-secondary"
               )}
             />
-            <div className="pointer-events-none absolute right-0 top-0 h-full w-12 bg-linear-to-l from-secondary via-secondary/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-r-md" />
-            <DropdownMenu>
+            <div
+              className={cn(
+                "pointer-events-none absolute right-0 top-0 h-full w-12 bg-linear-to-l from-secondary via-secondary/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-r-md",
+                isMenuOpen && "opacity-100"
+              )}
+            />
+            <DropdownMenu
+              open={isMenuOpen}
+              onOpenChange={(open) =>
+                setOpenMenuDrawingId((prev) =>
+                  open
+                    ? drawing.drawingId
+                    : prev === drawing.drawingId
+                      ? null
+                      : prev
+                )
+              }
+            >
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
@@ -113,7 +136,10 @@ export function DrawingList({
                   onClick={(e) => e.stopPropagation()}
                   title="More options"
                   aria-label="Drawing options"
-                  className="absolute top-1/2 dark:hover:bg-transparent hover:bg-transparent -translate-y-1/2 right-0 opacity-0 group-hover:opacity-100"
+                  className={cn(
+                    "absolute top-1/2 dark:hover:bg-transparent hover:bg-transparent -translate-y-1/2 right-0 opacity-0 group-hover:opacity-100",
+                    isMenuOpen && "opacity-100"
+                  )}
                 >
                   <sidebarIcons.MoreVertical />
                 </Button>
@@ -186,4 +212,3 @@ export function DrawingList({
     </>
   )
 }
-

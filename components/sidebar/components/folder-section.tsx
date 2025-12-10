@@ -20,7 +20,8 @@ import { cn } from "@/lib/utils"
 import {
   type KeyboardEvent,
   type MutableRefObject,
-  type RefObject
+  type RefObject,
+  useState
 } from "react"
 
 import {
@@ -114,6 +115,11 @@ export function FolderSection({
   inputRef,
   currentDrawingId
 }: FolderSectionProps) {
+  const [openFolderMenuId, setOpenFolderMenuId] = useState<string | null>(null)
+  const [openDrawingMenuId, setOpenDrawingMenuId] = useState<string | null>(
+    null
+  )
+
   return (
     <div className="flex flex-col">
       <div
@@ -163,6 +169,7 @@ export function FolderSection({
                 const isEditing = editingFolderId === folder.folderId
                 const isExpanded = expandedFolders.has(folder.folderId)
                 const folderDrawings = drawingsByFolder[folder.folderId] || []
+                const isFolderMenuOpen = openFolderMenuId === folder.folderId
 
                 return (
                   <div
@@ -251,13 +258,33 @@ export function FolderSection({
                         className={cn(
                           "border-none shadow-none focus-visible:border-none focus-visible:ring-0",
                           "group-hover:bg-secondary dark:group-hover:bg-secondary dark:bg-transparent pl-9",
+                          isFolderMenuOpen && "bg-secondary dark:bg-secondary",
                           isEditing
                             ? "cursor-text select-text"
                             : "cursor-pointer select-none"
                         )}
                       />
-                      <div className="pointer-events-none absolute right-0 top-0 h-full w-12 bg-linear-to-l from-secondary via-secondary/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-r-md" />
-                      <DropdownMenu>
+                      <div
+                        className={cn(
+                          "pointer-events-none absolute right-0 top-0 h-full w-12 bg-linear-to-l from-secondary via-secondary/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-r-md",
+                          isFolderMenuOpen && "opacity-100"
+                        )}
+                      />
+                      <DropdownMenu
+                        open={isFolderMenuOpen}
+                        onOpenChange={(open) => {
+                          setOpenFolderMenuId((prev) =>
+                            open
+                              ? folder.folderId
+                              : prev === folder.folderId
+                                ? null
+                                : prev
+                          )
+                          if (open) {
+                            setOpenDrawingMenuId(null)
+                          }
+                        }}
+                      >
                         <DropdownMenuTrigger asChild>
                           <Button
                             variant="ghost"
@@ -265,25 +292,15 @@ export function FolderSection({
                             onClick={(e) => e.stopPropagation()}
                             title="Folder options"
                             aria-label="Folder options"
-                            className="absolute top-1/2 dark:hover:bg-transparent hover:bg-transparent -translate-y-1/2 right-0 opacity-0 group-hover:opacity-100"
+                            className={cn(
+                              "absolute top-1/2 dark:hover:bg-transparent hover:bg-transparent -translate-y-1/2 right-0 opacity-0 group-hover:opacity-100",
+                              isFolderMenuOpen && "opacity-100"
+                            )}
                           >
                             <sidebarIcons.MoreVertical />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                          align="end"
-                          onInteractOutside={(event) => {
-                            const target = event.target as HTMLElement | null
-                            if (
-                              target &&
-                              target.closest(
-                                '[data-personalize-content="true"]'
-                              )
-                            ) {
-                              event.preventDefault()
-                            }
-                          }}
-                        >
+                        <DropdownMenuContent align="end">
                           <DropdownMenuItem
                             onClick={(e) => {
                               e.stopPropagation()
@@ -296,30 +313,23 @@ export function FolderSection({
                             <sidebarIcons.Pencil className="h-4 w-4" />
                             Rename
                           </DropdownMenuItem>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <DropdownMenuItem
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                }}
-                                onSelect={(e) => e.preventDefault()}
-                              >
-                                <sidebarIcons.Palette className="h-4 w-4" />
-                                Personalize
-                              </DropdownMenuItem>
-                            </PopoverTrigger>
-                            <PopoverContent
-                              align="end"
-                              className="w-80 space-y-3"
-                              sideOffset={6}
-                              data-personalize-content="true"
+                          <DropdownMenuSub>
+                            <DropdownMenuSubTrigger
+                              onClick={(e) => e.stopPropagation()}
+                              onSelect={(e) => e.preventDefault()}
                             >
-                              <div className="grid grid-cols-7 gap-2">
+                              <sidebarIcons.Palette className="h-4 w-4" />
+                              Personalize
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent
+                              sideOffset={10}
+                              className="space-y-3 p-3"
+                            >
+                              <div className="grid grid-cols-6 gap-y-3">
                                 {FOLDER_COLORS.map((option) => {
                                   const isActive =
                                     (folder.color ?? "default") === option.value
-                                  const swatchColor = `var(--draw-${option.value}-foreground)`
-                                  const swatchBg = `var(--draw-${option.value})`
+                                  const swatchBg = `var(--draw-${option.value}-foreground)`
 
                                   return (
                                     <button
@@ -333,24 +343,21 @@ export function FolderSection({
                                         )
                                       }}
                                       className={cn(
-                                        "flex h-8 w-8 items-center justify-center rounded-full border transition",
+                                        "flex h-6 w-6 items-center justify-center rounded-full border transition",
                                         isActive
-                                          ? "border-primary ring-2 ring-primary/40"
-                                          : "border-border hover:border-primary/60"
+                                          ? "ring-1 ring-offset-2"
+                                          : "hover:ring"
                                       )}
                                       style={{
-                                        backgroundColor: swatchBg,
-                                        color: swatchColor
+                                        backgroundColor: swatchBg
                                       }}
                                       aria-label={option.label}
-                                    >
-                                      •
-                                    </button>
+                                    ></button>
                                   )
                                 })}
                               </div>
                               <Separator />
-                              <div className="grid grid-cols-6 gap-2">
+                              <div className="grid grid-cols-6">
                                 {FOLDER_ICONS.map((option) => {
                                   const OptionIcon = option.Icon
                                   const isActive =
@@ -371,10 +378,10 @@ export function FolderSection({
                                         )
                                       }}
                                       className={cn(
-                                        "flex h-10 w-10 items-center justify-center rounded-md border transition",
+                                        "flex h-10 w-10 items-center justify-center rounded-md transition",
                                         isActive
-                                          ? "border-primary ring-2 ring-primary/40"
-                                          : "border-border hover:border-primary/60"
+                                          ? "bg-secondary"
+                                          : "hover:bg-secondary"
                                       )}
                                       aria-label={option.label}
                                     >
@@ -386,8 +393,8 @@ export function FolderSection({
                                   )
                                 })}
                               </div>
-                            </PopoverContent>
-                          </Popover>
+                            </DropdownMenuSubContent>
+                          </DropdownMenuSub>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             variant="destructive"
@@ -416,6 +423,8 @@ export function FolderSection({
                               drawing.drawingId === currentDrawingId
                             const isEditingDrawing =
                               editingId === drawing.drawingId
+                            const isDrawingMenuOpen =
+                              openDrawingMenuId === drawing.drawingId
 
                             return (
                               <div key={drawing._id} className="relative group">
@@ -464,11 +473,33 @@ export function FolderSection({
                                     "border-none shadow-none focus-visible:border-none focus-visible:ring-0 pl-9",
                                     isActive
                                       ? "bg-accent cursor-default"
-                                      : "group-hover:bg-secondary dark:group-hover:bg-secondary dark:bg-transparent cursor-pointer"
+                                      : "group-hover:bg-secondary dark:group-hover:bg-secondary dark:bg-transparent cursor-pointer",
+                                    !isActive &&
+                                      isDrawingMenuOpen &&
+                                      "bg-secondary dark:bg-secondary"
                                   )}
                                 />
-                                <div className="pointer-events-none absolute right-0 top-0 h-full w-12 bg-linear-to-l from-secondary via-secondary/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-r-md" />
-                                <DropdownMenu>
+                                <div
+                                  className={cn(
+                                    "pointer-events-none absolute right-0 top-0 h-full w-12 bg-linear-to-l from-secondary via-secondary/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-r-md",
+                                    isDrawingMenuOpen && "opacity-100"
+                                  )}
+                                />
+                                <DropdownMenu
+                                  open={isDrawingMenuOpen}
+                                  onOpenChange={(open) => {
+                                    setOpenDrawingMenuId((prev) =>
+                                      open
+                                        ? drawing.drawingId
+                                        : prev === drawing.drawingId
+                                          ? null
+                                          : prev
+                                    )
+                                    if (open) {
+                                      setOpenFolderMenuId(null)
+                                    }
+                                  }}
+                                >
                                   <DropdownMenuTrigger asChild>
                                     <Button
                                       variant="ghost"
@@ -476,7 +507,10 @@ export function FolderSection({
                                       onClick={(e) => e.stopPropagation()}
                                       title="More options"
                                       aria-label="Drawing options"
-                                      className="absolute top-1/2 dark:hover:bg-transparent hover:bg-transparent -translate-y-1/2 right-0 opacity-0 group-hover:opacity-100"
+                                      className={cn(
+                                        "absolute top-1/2 dark:hover:bg-transparent hover:bg-transparent -translate-y-1/2 right-0 opacity-0 group-hover:opacity-100",
+                                        isDrawingMenuOpen && "opacity-100"
+                                      )}
                                     >
                                       <sidebarIcons.MoreVertical />
                                     </Button>
@@ -575,4 +609,3 @@ export function FolderSection({
     </div>
   )
 }
-

@@ -236,6 +236,8 @@ export default function Canvas() {
   const [fadingOutBox02, setFadingOutBox02] = useState(false)
   const [fadingOutBox01, setFadingOutBox01] = useState(false)
   const [initialFadeInBox01, setInitialFadeInBox01] = useState(false)
+  const [drawingTheme01, setDrawingTheme01] = useState<"light" | "dark">("dark")
+  const [drawingTheme02, setDrawingTheme02] = useState<"light" | "dark">("dark")
 
   // Refs to track current box states without causing effect re-runs
   const drawing01Ref = useRef(drawing01)
@@ -429,6 +431,9 @@ export default function Canvas() {
     ) => {
       if (drawing01?.drawingId) {
         handleSave(elements, appState, files, drawing01.drawingId)
+        if (appState.theme) {
+          setDrawingTheme01(appState.theme === "light" ? "light" : "dark")
+        }
       }
     },
     [drawing01, handleSave]
@@ -442,6 +447,9 @@ export default function Canvas() {
     ) => {
       if (drawing02?.drawingId) {
         handleSave(elements, appState, files, drawing02.drawingId)
+        if (appState.theme) {
+          setDrawingTheme02(appState.theme === "light" ? "light" : "dark")
+        }
       }
     },
     [drawing02, handleSave]
@@ -604,6 +612,44 @@ export default function Canvas() {
     []
   )
 
+  const getDrawingTheme = useCallback(
+    (drawingData?: DrawingData | null): "light" | "dark" => {
+      const theme = (
+        drawingData?.appState as { theme?: "light" | "dark" } | undefined
+      )?.theme
+      return theme === "light" ? "light" : "dark"
+    },
+    []
+  )
+
+  // Keep theme state in sync when a drawing loads or changes
+  useEffect(() => {
+    setDrawingTheme01(getDrawingTheme(drawing01?.data))
+  }, [drawing01?.data, getDrawingTheme])
+
+  useEffect(() => {
+    setDrawingTheme02(getDrawingTheme(drawing02?.data))
+  }, [drawing02?.data, getDrawingTheme])
+
+  const renderNameBadge = useCallback(
+    (name?: string | null, theme: "light" | "dark" = "dark") => {
+      const label = name?.trim() || "Untitled"
+      return (
+        <div className="hidden lg:flex pointer-events-none absolute left-28 top-4 z-30 h-9 items-center">
+          <span
+            className={cn(
+              "text-md font-medium",
+              theme === "dark" ? "text-[#E3E3E8]" : "text-[#1B1B1F]"
+            )}
+          >
+            {label}
+          </span>
+        </div>
+      )
+    },
+    []
+  )
+
   return (
     <div className="h-full w-full relative">
       {/* drawing box 01 */}
@@ -620,6 +666,7 @@ export default function Canvas() {
                   : "z-20 opacity-100"
           )}
         >
+          {renderNameBadge(drawing01.data?.name, drawingTheme01)}
           <Excalidraw
             key={keyWithFiles(drawing01.drawingId, files01)}
             initialData={initialData01}
@@ -640,6 +687,7 @@ export default function Canvas() {
                 : "z-20 opacity-100"
           )}
         >
+          {renderNameBadge(drawing02.data?.name, drawingTheme02)}
           <Excalidraw
             key={keyWithFiles(drawing02.drawingId, files02)}
             initialData={initialData02}
