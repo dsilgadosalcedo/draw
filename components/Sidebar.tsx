@@ -13,7 +13,10 @@ import {
   LogOut,
   LineSquiggleIcon,
   SearchIcon,
-  PanelLeftIcon
+  PanelLeftIcon,
+  Pencil,
+  Trash2,
+  HardDrive
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "./ui/input"
@@ -28,6 +31,17 @@ import {
   DropdownMenuTrigger
 } from "./ui/dropdown-menu"
 
+// Helper function to format bytes to KB/MB
+function formatStorage(bytes: number): string {
+  if (bytes < 1024 * 1024) {
+    // Less than 1 MB, show in KB
+    return `${(bytes / 1024).toFixed(0)} KB`
+  } else {
+    // 1 MB or more, show in MB with 2 decimals
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+  }
+}
+
 export default function Sidebar() {
   const { currentDrawingId, setCurrentDrawingId } = useDrawing()
   const drawings = useQuery(api.drawings.list)
@@ -35,6 +49,7 @@ export default function Sidebar() {
     api.drawings.get,
     currentDrawingId ? { drawingId: currentDrawingId } : "skip"
   )
+  const userStorage = useQuery(api.drawings.getUserStorage)
   const updateName = useMutation(api.drawings.updateName)
   const removeDrawing = useMutation(api.drawings.remove)
   const [isOpen, setIsOpen] = useState(false)
@@ -297,6 +312,7 @@ export default function Sidebar() {
                             startEditing(drawing.drawingId, drawing.name, e)
                           }}
                         >
+                          <Pencil className="h-4 w-4" />
                           Rename
                         </DropdownMenuItem>
                         <DropdownMenuItem
@@ -306,6 +322,7 @@ export default function Sidebar() {
                             handleRemove(drawing.drawingId)
                           }}
                         >
+                          <Trash2 className="h-4 w-4" />
                           Remove
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -316,8 +333,18 @@ export default function Sidebar() {
             )}
           </ScrollArea>
 
-          {/* Footer with Sign Out Button */}
-          <div className="px-2 py-3 border-t">
+          {/* Footer with Storage Display and Sign Out Button */}
+          <div className="px-2 py-3 border-t space-y-2">
+            {/* Storage Display */}
+            {userStorage && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted/50 text-muted-foreground text-sm">
+                <HardDrive className="h-4 w-4" />
+                <span className="flex-1">Storage used</span>
+                <span className="font-medium">
+                  {formatStorage(userStorage.totalBytes)}
+                </span>
+              </div>
+            )}
             <Button
               onClick={handleSignOut}
               variant="outline"

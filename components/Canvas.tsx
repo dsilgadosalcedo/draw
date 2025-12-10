@@ -6,7 +6,7 @@ import { useEffect, useRef, useMemo, useCallback, useState } from "react"
 import dynamic from "next/dynamic"
 import "@excalidraw/excalidraw/index.css"
 import { useDrawing } from "../context/DrawingContext"
-import { AppState } from "@excalidraw/excalidraw/types"
+import { AppState, BinaryFiles } from "@excalidraw/excalidraw/types"
 import { OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types"
 import { cn } from "@/lib/utils"
 
@@ -24,6 +24,7 @@ type DrawingData = {
   name: string
   elements: readonly OrderedExcalidrawElement[] | null
   appState: SerializedAppState | null
+  files?: Record<string, string> // Map of fileId -> URL
 } | null
 
 // Helper function to serialize any value (handles nested structures)
@@ -116,7 +117,7 @@ function useDebouncedCallback(
   callback: (
     elements: readonly OrderedExcalidrawElement[],
     appState: AppState,
-    // files: BinaryFiles,
+    files: BinaryFiles,
     drawingId: string | null
   ) => void,
   delay: number = 500
@@ -126,6 +127,7 @@ function useDebouncedCallback(
     null
   )
   const pendingAppStateRef = useRef<AppState | null>(null)
+  const pendingFilesRef = useRef<BinaryFiles | null>(null)
   const pendingDrawingIdRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -140,11 +142,13 @@ function useDebouncedCallback(
     (
       elements: readonly OrderedExcalidrawElement[],
       appState: AppState,
+      files: BinaryFiles,
       drawingId: string | null
     ) => {
       // Store the latest values along with the drawingId
       pendingElementsRef.current = elements
       pendingAppStateRef.current = appState
+      pendingFilesRef.current = files
       pendingDrawingIdRef.current = drawingId
 
       if (timeoutRef.current) {
@@ -154,15 +158,18 @@ function useDebouncedCallback(
         if (
           pendingElementsRef.current &&
           pendingAppStateRef.current &&
+          pendingFilesRef.current &&
           pendingDrawingIdRef.current !== null
         ) {
           callback(
             pendingElementsRef.current,
             pendingAppStateRef.current,
+            pendingFilesRef.current,
             pendingDrawingIdRef.current
           )
           pendingElementsRef.current = null
           pendingAppStateRef.current = null
+          pendingFilesRef.current = null
           pendingDrawingIdRef.current = null
         }
       }, delay)
@@ -178,15 +185,18 @@ function useDebouncedCallback(
     if (
       pendingElementsRef.current &&
       pendingAppStateRef.current &&
+      pendingFilesRef.current &&
       pendingDrawingIdRef.current !== null
     ) {
       callback(
         pendingElementsRef.current,
         pendingAppStateRef.current,
+        pendingFilesRef.current,
         pendingDrawingIdRef.current
       )
       pendingElementsRef.current = null
       pendingAppStateRef.current = null
+      pendingFilesRef.current = null
       pendingDrawingIdRef.current = null
     }
   }, [callback])
@@ -377,6 +387,7 @@ export default function Canvas() {
     (
       elements: readonly OrderedExcalidrawElement[],
       appState: AppState,
+      files: BinaryFiles,
       idToSave: string | null
     ) => {
       if (idToSave) {
@@ -384,7 +395,8 @@ export default function Canvas() {
         void saveDrawing({
           drawingId: idToSave,
           elements,
-          appState: serializedAppState
+          appState: serializedAppState,
+          files
         }).catch((err) => console.error("Failed to auto-save drawing:", err))
       }
     },
@@ -404,80 +416,169 @@ export default function Canvas() {
   // Handler that saves with debounce
   const handleChange = (
     elements: readonly OrderedExcalidrawElement[],
-    appState: AppState
-    // files: BinaryFiles
+    appState: AppState,
+    files: BinaryFiles
   ) => {
-    handleSave(elements, appState, drawingId)
+    handleSave(elements, appState, files, drawingId)
   }
 
   // Create change handlers for each box that capture the correct drawingId
   const handleChange01 = useCallback(
-    (elements: readonly OrderedExcalidrawElement[], appState: AppState) => {
+    (
+      elements: readonly OrderedExcalidrawElement[],
+      appState: AppState,
+      files: BinaryFiles
+    ) => {
       if (drawing01?.drawingId) {
-        handleSave(elements, appState, drawing01.drawingId)
+        handleSave(elements, appState, files, drawing01.drawingId)
       }
     },
     [drawing01, handleSave]
   )
 
   const handleChange02 = useCallback(
-    (elements: readonly OrderedExcalidrawElement[], appState: AppState) => {
+    (
+      elements: readonly OrderedExcalidrawElement[],
+      appState: AppState,
+      files: BinaryFiles
+    ) => {
       if (drawing02?.drawingId) {
-        handleSave(elements, appState, drawing02.drawingId)
+        handleSave(elements, appState, files, drawing02.drawingId)
       }
     },
     [drawing02, handleSave]
   )
 
+  // State to store loaded files for each drawing
+  const [files01, setFiles01] = useState<BinaryFiles | undefined>(undefined)
+  const [files02, setFiles02] = useState<BinaryFiles | undefined>(undefined)
+
+  // Helper function to load files from URLs
+  const loadFiles = useCallback(
+    async (fileUrls: Record<string, string> | undefined) => {
+      if (!fileUrls || Object.keys(fileUrls).length === 0) {
+        return undefined
+      }
+
+      const loadedFiles: BinaryFiles = {} as BinaryFiles
+      for (const [fileId, url] of Object.entries(fileUrls)) {
+        try {
+          const response = await fetch(url)
+          const blob = await response.blob()
+          const dataURL = await new Promise<string>((resolve) => {
+            const reader = new FileReader()
+            reader.onloadend = () => resolve(reader.result as string)
+            reader.readAsDataURL(blob)
+          })
+
+          // Map blob type to valid Excalidraw mime type
+          // Valid types: image/png, image/jpeg, image/gif, image/webp, image/svg+xml, image/bmp, image/x-icon, image/avif, image/jfif, or application/octet-stream
+          let mimeType: string = blob.type || "image/png"
+          const validImageTypes = [
+            "image/png",
+            "image/jpeg",
+            "image/jpg",
+            "image/gif",
+            "image/webp",
+            "image/svg+xml",
+            "image/bmp",
+            "image/x-icon",
+            "image/avif",
+            "image/jfif"
+          ]
+          // Normalize jpg to jpeg
+          if (mimeType === "image/jpg") {
+            mimeType = "image/jpeg"
+          }
+          if (!validImageTypes.includes(mimeType)) {
+            mimeType = "application/octet-stream"
+          }
+
+          loadedFiles[fileId as any] = {
+            id: fileId as any,
+            mimeType: mimeType as any,
+            dataURL: dataURL as any,
+            created: Date.now()
+          }
+        } catch (error) {
+          console.error("Error loading file:", error)
+        }
+      }
+      return loadedFiles
+    },
+    []
+  )
+
+  // Load files when drawing data changes
+  useEffect(() => {
+    if (drawing01?.data?.files) {
+      loadFiles(drawing01.data.files).then((files) => setFiles01(files))
+    } else {
+      setFiles01(undefined)
+    }
+  }, [drawing01?.data?.files, loadFiles])
+
+  useEffect(() => {
+    if (drawing02?.data?.files) {
+      loadFiles(drawing02.data.files).then((files) => setFiles02(files))
+    } else {
+      setFiles02(undefined)
+    }
+  }, [drawing02?.data?.files, loadFiles])
+
   // Helper to compute initial data for a specific drawing
-  const computeInitialData = useCallback((drawingData: DrawingData | null) => {
-    const defaultCanvasTheme: "light" | "dark" = "dark"
+  const computeInitialData = useCallback(
+    (drawingData: DrawingData | null, files?: BinaryFiles) => {
+      const defaultCanvasTheme: "light" | "dark" = "dark"
 
-    if (drawingData !== null && drawingData !== undefined) {
-      const deserializedAppState = deserializeAppState(drawingData.appState)
+      if (drawingData !== null && drawingData !== undefined) {
+        const deserializedAppState = deserializeAppState(drawingData.appState)
 
-      // Remove collaborators to prevent Map vs Object crash
-      let cleanAppState: Partial<AppState> = deserializedAppState || {}
-      if (deserializedAppState && typeof deserializedAppState === "object") {
-        cleanAppState = { ...deserializedAppState }
-        delete (cleanAppState as { collaborators?: unknown }).collaborators
+        // Remove collaborators to prevent Map vs Object crash
+        let cleanAppState: Partial<AppState> = deserializedAppState || {}
+        if (deserializedAppState && typeof deserializedAppState === "object") {
+          cleanAppState = { ...deserializedAppState }
+          delete (cleanAppState as { collaborators?: unknown }).collaborators
+        }
+
+        // Ensure appState is an object
+        if (!cleanAppState || typeof cleanAppState !== "object") {
+          cleanAppState = {}
+        }
+
+        // Use saved theme if it exists, otherwise use default
+        if (!cleanAppState.theme) {
+          cleanAppState.theme = defaultCanvasTheme
+        }
+
+        return {
+          elements: drawingData.elements ?? null,
+          appState: cleanAppState,
+          files,
+          scrollToContent: true
+        }
       }
 
-      // Ensure appState is an object
-      if (!cleanAppState || typeof cleanAppState !== "object") {
-        cleanAppState = {}
-      }
-
-      // Use saved theme if it exists, otherwise use default
-      if (!cleanAppState.theme) {
-        cleanAppState.theme = defaultCanvasTheme
-      }
-
+      // Otherwise, show empty canvas with default theme
       return {
-        elements: drawingData.elements ?? null,
-        appState: cleanAppState,
+        elements: null,
+        appState: {
+          theme: defaultCanvasTheme
+        },
         scrollToContent: true
       }
-    }
-
-    // Otherwise, show empty canvas with default theme
-    return {
-      elements: null,
-      appState: {
-        theme: defaultCanvasTheme
-      },
-      scrollToContent: true
-    }
-  }, [])
+    },
+    []
+  )
 
   // Compute initial data for each box
   const initialData01 = useMemo(
-    () => computeInitialData(drawing01?.data ?? null),
-    [drawing01, computeInitialData]
+    () => computeInitialData(drawing01?.data ?? null, files01),
+    [drawing01, files01, computeInitialData]
   )
   const initialData02 = useMemo(
-    () => computeInitialData(drawing02?.data ?? null),
-    [drawing02, computeInitialData]
+    () => computeInitialData(drawing02?.data ?? null, files02),
+    [drawing02, files02, computeInitialData]
   )
 
   // If no drawingId, show empty canvas
