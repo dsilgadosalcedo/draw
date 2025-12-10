@@ -26,6 +26,8 @@ export default defineSchema({
     userId: v.string(),
     folderId: v.string(),
     name: v.string(),
+    icon: v.optional(v.string()),
+    color: v.optional(v.string()),
     isActive: v.optional(v.boolean())
   })
     .index("by_userId", ["userId"])

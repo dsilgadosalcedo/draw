@@ -17,7 +17,9 @@ export const list = query({
       _id: v.id("folders"),
       _creationTime: v.number(),
       folderId: v.string(),
-      name: v.string()
+      name: v.string(),
+      icon: v.optional(v.string()),
+      color: v.optional(v.string())
     })
   ),
   handler: async (ctx) => {
@@ -40,14 +42,18 @@ export const list = query({
       _id: f._id,
       _creationTime: f._creationTime,
       folderId: f.folderId,
-      name: f.name
+      name: f.name,
+      icon: f.icon ?? "folder",
+      color: f.color ?? "default"
     }))
   }
 })
 
 export const create = mutation({
   args: {
-    name: v.string()
+    name: v.string(),
+    icon: v.optional(v.string()),
+    color: v.optional(v.string())
   },
   returns: v.object({
     folderId: v.string()
@@ -65,6 +71,8 @@ export const create = mutation({
       userId: userIdString,
       folderId,
       name: args.name.trim() || "New folder",
+      icon: args.icon ?? "folder",
+      color: args.color ?? "default",
       isActive: true
     })
 
@@ -98,6 +106,40 @@ export const updateName = mutation({
 
     await ctx.db.patch(existing._id, {
       name: args.name.trim()
+    })
+
+    return null
+  }
+})
+
+export const updateAppearance = mutation({
+  args: {
+    folderId: v.string(),
+    icon: v.string(),
+    color: v.string()
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx)
+    if (userId === null) {
+      throw new Error("Unauthorized")
+    }
+
+    const userIdString = String(userId)
+    const existing = await ctx.db
+      .query("folders")
+      .withIndex("by_userId_and_folderId", (q) =>
+        q.eq("userId", userIdString).eq("folderId", args.folderId)
+      )
+      .first()
+
+    if (!existing || existing.isActive === false) {
+      throw new Error("Folder not found")
+    }
+
+    await ctx.db.patch(existing._id, {
+      icon: args.icon,
+      color: args.color
     })
 
     return null

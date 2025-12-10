@@ -78,6 +78,26 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --draw-default: #ffffff;
+  --draw-default-foreground: #373530;
+  --draw-gray: #f1f1ef;
+  --draw-gray-foreground: #787774;
+  --draw-brown: #f3eeee;
+  --draw-brown-foreground: #976d57;
+  --draw-orange: #f8ecdf;
+  --draw-orange-foreground: #cc782f;
+  --draw-yellow: #faf3dd;
+  --draw-yellow-foreground: #c29343;
+  --draw-green: #eef3ed;
+  --draw-green-foreground: #548164;
+  --draw-blue: #e9f3f7;
+  --draw-blue-foreground: #487ca5;
+  --draw-purple: #f6f3f8;
+  --draw-purple-foreground: #8a67ab;
+  --draw-pink: #f9f2f5;
+  --draw-pink-foreground: #b35488;
+  --draw-red: #faecec;
+  --draw-red-foreground: #c4554d;
 }
 
 .dark {
@@ -112,6 +132,26 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --draw-default: #191919;
+  --draw-default-foreground: #d4d4d4;
+  --draw-gray: #252525;
+  --draw-gray-foreground: #9b9b9b;
+  --draw-brown: #2e2724;
+  --draw-brown-foreground: #a27763;
+  --draw-orange: #36291f;
+  --draw-orange-foreground: #cb7b37;
+  --draw-yellow: #372e20;
+  --draw-yellow-foreground: #c19138;
+  --draw-green: #242b26;
+  --draw-green-foreground: #4f9768;
+  --draw-blue: #1f282d;
+  --draw-blue-foreground: #447acb;
+  --draw-purple: #2a2430;
+  --draw-purple-foreground: #865dbb;
+  --draw-pink: #2e2328;
+  --draw-pink-foreground: #ba4a78;
+  --draw-red: #332523;
+  --draw-red-foreground: #be524b;
 }
 
 @layer base {

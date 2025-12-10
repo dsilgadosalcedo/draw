@@ -3,7 +3,14 @@
 import { useQuery, useMutation } from "convex/react"
 import { api } from "../convex/_generated/api"
 import { useDrawing } from "../context/DrawingContext"
-import { useState, useRef, useEffect, useMemo } from "react"
+import {
+  useState,
+  useRef,
+  useEffect,
+  useMemo,
+  type CSSProperties,
+  type ComponentType
+} from "react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
@@ -19,7 +26,32 @@ import {
   HardDrive,
   Folder,
   FolderPlus,
-  ChevronDown
+  ChevronDown,
+  CircleDollarSign,
+  BookOpen,
+  GraduationCap,
+  PenLine,
+  Braces,
+  TerminalSquare,
+  Music,
+  Cake,
+  Palette,
+  Stethoscope,
+  Clover,
+  Briefcase,
+  BarChart3,
+  UserRound,
+  Dumbbell,
+  ListTodo,
+  Scale,
+  Globe2,
+  Plane,
+  Wrench,
+  PawPrint,
+  FlaskConical,
+  Brain,
+  Heart,
+  Sprout
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Input } from "./ui/input"
@@ -37,6 +69,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSeparator
 } from "./ui/dropdown-menu"
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover"
 import { Separator } from "./ui/separator"
 
 // Helper function to format bytes to KB/MB
@@ -49,6 +82,56 @@ function formatStorage(bytes: number): string {
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
   }
 }
+
+const FOLDER_COLORS = [
+  { value: "default", label: "Default" },
+  { value: "gray", label: "Gray" },
+  { value: "brown", label: "Brown" },
+  { value: "orange", label: "Orange" },
+  { value: "yellow", label: "Yellow" },
+  { value: "green", label: "Green" },
+  { value: "blue", label: "Blue" },
+  { value: "purple", label: "Purple" },
+  { value: "pink", label: "Pink" },
+  { value: "red", label: "Red" }
+] as const
+
+const FOLDER_ICONS = [
+  { value: "folder", label: "Folder", Icon: Folder },
+  { value: "circle-dollar-sign", label: "Money", Icon: CircleDollarSign },
+  { value: "book-open", label: "Book", Icon: BookOpen },
+  { value: "graduation-cap", label: "Education", Icon: GraduationCap },
+  { value: "pencil", label: "Pencil", Icon: Pencil },
+  { value: "pen-line", label: "Pen", Icon: PenLine },
+  { value: "braces", label: "Code", Icon: Braces },
+  { value: "terminal-square", label: "Terminal", Icon: TerminalSquare },
+  { value: "music", label: "Music", Icon: Music },
+  { value: "cake", label: "Celebration", Icon: Cake },
+  { value: "palette", label: "Art", Icon: Palette },
+  { value: "stethoscope", label: "Health", Icon: Stethoscope },
+  { value: "clover", label: "Luck", Icon: Clover },
+  { value: "briefcase", label: "Work", Icon: Briefcase },
+  { value: "bar-chart-3", label: "Analytics", Icon: BarChart3 },
+  { value: "user-round", label: "Person", Icon: UserRound },
+  { value: "dumbbell", label: "Fitness", Icon: Dumbbell },
+  { value: "list-todo", label: "Tasks", Icon: ListTodo },
+  { value: "scale", label: "Legal", Icon: Scale },
+  { value: "globe-2", label: "Globe", Icon: Globe2 },
+  { value: "plane", label: "Travel", Icon: Plane },
+  { value: "wrench", label: "Tools", Icon: Wrench },
+  { value: "paw-print", label: "Pets", Icon: PawPrint },
+  { value: "flask-conical", label: "Science", Icon: FlaskConical },
+  { value: "brain", label: "Ideas", Icon: Brain },
+  { value: "heart", label: "Heart", Icon: Heart },
+  { value: "sprout", label: "Growth", Icon: Sprout }
+] as const
+
+const folderIconMap = Object.fromEntries(
+  FOLDER_ICONS.map((icon) => [icon.value, icon.Icon])
+) as Record<
+  string,
+  ComponentType<{ className?: string; style?: CSSProperties }>
+>
 
 export default function Sidebar() {
   const { currentDrawingId, setCurrentDrawingId } = useDrawing()
@@ -63,6 +146,7 @@ export default function Sidebar() {
   const removeDrawing = useMutation(api.drawings.remove)
   const createFolder = useMutation(api.folders.create)
   const updateFolderName = useMutation(api.folders.updateName)
+  const updateFolderAppearance = useMutation(api.folders.updateAppearance)
   const removeFolder = useMutation(api.folders.remove)
   const moveDrawingToFolder = useMutation(api.folders.moveDrawingToFolder)
   const [isOpen, setIsOpen] = useState(false)
@@ -78,10 +162,14 @@ export default function Sidebar() {
   )
   const [searchDialogOpen, setSearchDialogOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
+  const [newFolderDialogOpen, setNewFolderDialogOpen] = useState(false)
+  const [newFolderDialogName, setNewFolderDialogName] = useState("")
+  const [drawingIdToMove, setDrawingIdToMove] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
   const newFolderInputRef = useRef<HTMLInputElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const newFolderDialogInputRef = useRef<HTMLInputElement>(null)
   const { signOut } = useAuthActions()
   const router = useRouter()
 
@@ -289,6 +377,75 @@ export default function Sidebar() {
     }
   }
 
+  const handleUpdateFolderAppearance = async (
+    folderId: string,
+    updates: { icon?: string; color?: string }
+  ) => {
+    const folder = folders?.find((f) => f.folderId === folderId)
+    if (!folder) return
+
+    const icon = updates.icon ?? folder.icon ?? "folder"
+    const color = updates.color ?? folder.color ?? "default"
+
+    try {
+      await updateFolderAppearance({ folderId, icon, color })
+    } catch (error) {
+      console.error("Failed to update folder appearance:", error)
+    }
+  }
+
+  const handleOpenNewFolderDialog = (drawingId: string) => {
+    setDrawingIdToMove(drawingId)
+    setNewFolderDialogName("")
+    setNewFolderDialogOpen(true)
+  }
+
+  const handleCreateFolderAndMove = async () => {
+    if (!drawingIdToMove || !newFolderDialogName.trim()) {
+      setNewFolderDialogOpen(false)
+      setDrawingIdToMove(null)
+      setNewFolderDialogName("")
+      return
+    }
+    try {
+      const { folderId } = await createFolder({
+        name: newFolderDialogName.trim()
+      })
+      await handleMoveDrawingToFolder(drawingIdToMove, folderId)
+      setNewFolderDialogOpen(false)
+      setDrawingIdToMove(null)
+      setNewFolderDialogName("")
+    } catch (error) {
+      console.error("Failed to create folder and move drawing:", error)
+    }
+  }
+
+  const handleNewFolderDialogBlur = () => {
+    // Only create if there's a name, and use a small delay to check if dialog is still open
+    if (newFolderDialogName.trim()) {
+      // Use setTimeout to allow dialog close handlers to run first
+      setTimeout(() => {
+        if (newFolderDialogOpen && newFolderDialogName.trim()) {
+          handleCreateFolderAndMove()
+        }
+      }, 200)
+    }
+  }
+
+  const handleNewFolderDialogKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>
+  ) => {
+    if (e.key === "Enter") {
+      e.preventDefault()
+      handleCreateFolderAndMove()
+    } else if (e.key === "Escape") {
+      e.preventDefault()
+      setNewFolderDialogOpen(false)
+      setDrawingIdToMove(null)
+      setNewFolderDialogName("")
+    }
+  }
+
   // Focus input when editing starts
   useEffect(() => {
     if (editingId && inputRef.current) {
@@ -345,6 +502,19 @@ export default function Sidebar() {
       searchInputRef.current.focus()
     }
   }, [searchDialogOpen])
+
+  // Focus new folder dialog input when dialog opens
+  useEffect(() => {
+    if (newFolderDialogOpen && newFolderDialogInputRef.current) {
+      const timeoutId = setTimeout(() => {
+        if (newFolderDialogInputRef.current) {
+          newFolderDialogInputRef.current.focus()
+          newFolderDialogInputRef.current.select()
+        }
+      }, 100)
+      return () => clearTimeout(timeoutId)
+    }
+  }, [newFolderDialogOpen])
 
   // Group drawings by folderId for efficient lookups
   const { uncategorizedDrawings, drawingsByFolder } = useMemo(() => {
@@ -513,7 +683,20 @@ export default function Sidebar() {
                           }}
                         >
                           <div className="flex items-center gap-2 group relative">
-                            <Folder className="absolute top-1/2 -translate-y-1/2 left-3 h-4 w-4 text-muted-foreground shrink-0 group-hover:hidden" />
+                            {(() => {
+                              const folderColor = folder.color ?? "default"
+                              const iconKey = folder.icon ?? "folder"
+                              const FolderIcon =
+                                folderIconMap[iconKey] ?? folderIconMap.folder
+                              const iconColor = `var(--draw-${folderColor}-foreground)`
+
+                              return (
+                                <FolderIcon
+                                  className="absolute top-1/2 -translate-y-1/2 left-3 h-4 w-4 shrink-0 group-hover:hidden"
+                                  style={{ color: iconColor }}
+                                />
+                              )
+                            })()}
                             <ChevronDown
                               className={cn(
                                 "h-4 w-4 absolute top-1/2 -translate-y-1/2 left-3 transition-transform hidden group-hover:block text-muted-foreground",
@@ -522,6 +705,16 @@ export default function Sidebar() {
                             />
                             <Input
                               ref={isEditing ? folderInputRef : null}
+                              tabIndex={isEditing ? 0 : -1}
+                              onMouseDown={(e) => {
+                                if (isEditing) {
+                                  // Keep focus while editing but avoid bubbling to the folder toggle
+                                  e.stopPropagation()
+                                  return
+                                }
+                                // Prevent accidental focus/text selection when not renaming
+                                e.preventDefault()
+                              }}
                               onClick={(e) => {
                                 if (isEditing) {
                                   e.stopPropagation()
@@ -534,8 +727,29 @@ export default function Sidebar() {
                               onChange={(e) =>
                                 setEditingFolderName(e.target.value)
                               }
-                              onBlur={() => {
+                              onBlur={(e) => {
                                 if (isEditing) {
+                                  const related =
+                                    e.relatedTarget instanceof HTMLElement
+                                      ? e.relatedTarget
+                                      : null
+                                  const relatedLabel =
+                                    related?.getAttribute("aria-label") || ""
+                                  const shouldKeepEditing =
+                                    relatedLabel === "Folder options" ||
+                                    related === null
+
+                                  if (shouldKeepEditing) {
+                                    // Refocus and reselect after dropdown closes
+                                    requestAnimationFrame(() => {
+                                      if (folderInputRef.current) {
+                                        folderInputRef.current.focus()
+                                        folderInputRef.current.select()
+                                      }
+                                    })
+                                    return
+                                  }
+
                                   saveFolderName(folder.folderId)
                                 }
                               }}
@@ -544,7 +758,10 @@ export default function Sidebar() {
                               }
                               className={cn(
                                 "border-none shadow-none focus-visible:border-none focus-visible:ring-0",
-                                "group-hover:bg-secondary dark:group-hover:bg-secondary dark:bg-transparent cursor-pointer pl-9"
+                                "group-hover:bg-secondary dark:group-hover:bg-secondary dark:bg-transparent pl-9",
+                                isEditing
+                                  ? "cursor-text select-text"
+                                  : "cursor-pointer select-none"
                               )}
                             />
                             <div className="pointer-events-none absolute right-0 top-0 h-full w-12 bg-linear-to-l from-secondary via-secondary/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-r-md" />
@@ -561,7 +778,21 @@ export default function Sidebar() {
                                   <MoreVertical />
                                 </Button>
                               </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
+                              <DropdownMenuContent
+                                align="end"
+                                onInteractOutside={(event) => {
+                                  const target =
+                                    event.target as HTMLElement | null
+                                  if (
+                                    target &&
+                                    target.closest(
+                                      '[data-personalize-content="true"]'
+                                    )
+                                  ) {
+                                    event.preventDefault()
+                                  }
+                                }}
+                              >
                                 <DropdownMenuItem
                                   onClick={(e) => {
                                     e.stopPropagation()
@@ -575,6 +806,101 @@ export default function Sidebar() {
                                   <Pencil className="h-4 w-4" />
                                   Rename
                                 </DropdownMenuItem>
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <DropdownMenuItem
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                      }}
+                                      onSelect={(e) => e.preventDefault()}
+                                    >
+                                      <Palette className="h-4 w-4" />
+                                      Personalize
+                                    </DropdownMenuItem>
+                                  </PopoverTrigger>
+                                  <PopoverContent
+                                    align="end"
+                                    className="w-80 space-y-3"
+                                    sideOffset={6}
+                                    data-personalize-content="true"
+                                  >
+                                    <div className="grid grid-cols-7 gap-2">
+                                      {FOLDER_COLORS.map((option) => {
+                                        const isActive =
+                                          (folder.color ?? "default") ===
+                                          option.value
+                                        const swatchColor = `var(--draw-${option.value}-foreground)`
+                                        const swatchBg = `var(--draw-${option.value})`
+
+                                        return (
+                                          <button
+                                            key={option.value}
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              handleUpdateFolderAppearance(
+                                                folder.folderId,
+                                                { color: option.value }
+                                              )
+                                            }}
+                                            className={cn(
+                                              "flex h-8 w-8 items-center justify-center rounded-full border transition",
+                                              isActive
+                                                ? "border-primary ring-2 ring-primary/40"
+                                                : "border-border hover:border-primary/60"
+                                            )}
+                                            style={{
+                                              backgroundColor: swatchBg,
+                                              color: swatchColor
+                                            }}
+                                            aria-label={option.label}
+                                          >
+                                            •
+                                          </button>
+                                        )
+                                      })}
+                                    </div>
+                                    <Separator />
+                                    <div className="grid grid-cols-6 gap-2">
+                                      {FOLDER_ICONS.map((option) => {
+                                        const OptionIcon = option.Icon
+                                        const isActive =
+                                          (folder.icon ?? "folder") ===
+                                          option.value
+                                        const iconColor = `var(--draw-${
+                                          folder.color ?? "default"
+                                        }-foreground)`
+
+                                        return (
+                                          <button
+                                            key={option.value}
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              handleUpdateFolderAppearance(
+                                                folder.folderId,
+                                                { icon: option.value }
+                                              )
+                                            }}
+                                            className={cn(
+                                              "flex h-10 w-10 items-center justify-center rounded-md border transition",
+                                              isActive
+                                                ? "border-primary ring-2 ring-primary/40"
+                                                : "border-border hover:border-primary/60"
+                                            )}
+                                            aria-label={option.label}
+                                          >
+                                            <OptionIcon
+                                              className="h-5 w-5"
+                                              style={{ color: iconColor }}
+                                            />
+                                          </button>
+                                        )
+                                      })}
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+                                <DropdownMenuSeparator />
                                 <DropdownMenuItem
                                   variant="destructive"
                                   onClick={(e) => {
@@ -685,30 +1011,11 @@ export default function Sidebar() {
                                             </DropdownMenuSubTrigger>
                                             <DropdownMenuSubContent>
                                               <DropdownMenuItem
-                                                onClick={async (e) => {
+                                                onClick={(e) => {
                                                   e.stopPropagation()
-                                                  const newFolderName =
-                                                    prompt("Enter folder name:")
-                                                  if (
-                                                    newFolderName &&
-                                                    newFolderName.trim()
-                                                  ) {
-                                                    try {
-                                                      const { folderId } =
-                                                        await createFolder({
-                                                          name: newFolderName.trim()
-                                                        })
-                                                      await handleMoveDrawingToFolder(
-                                                        drawing.drawingId,
-                                                        folderId
-                                                      )
-                                                    } catch (error) {
-                                                      console.error(
-                                                        "Failed to create folder:",
-                                                        error
-                                                      )
-                                                    }
-                                                  }
+                                                  handleOpenNewFolderDialog(
+                                                    drawing.drawingId
+                                                  )
                                                 }}
                                               >
                                                 <Plus className="h-4 w-4" />
@@ -858,26 +1165,9 @@ export default function Sidebar() {
                           </DropdownMenuSubTrigger>
                           <DropdownMenuSubContent>
                             <DropdownMenuItem
-                              onClick={async (e) => {
+                              onClick={(e) => {
                                 e.stopPropagation()
-                                const newFolderName =
-                                  prompt("Enter folder name:")
-                                if (newFolderName && newFolderName.trim()) {
-                                  try {
-                                    const { folderId } = await createFolder({
-                                      name: newFolderName.trim()
-                                    })
-                                    await handleMoveDrawingToFolder(
-                                      drawing.drawingId,
-                                      folderId
-                                    )
-                                  } catch (error) {
-                                    console.error(
-                                      "Failed to create folder:",
-                                      error
-                                    )
-                                  }
-                                }
+                                handleOpenNewFolderDialog(drawing.drawingId)
                               }}
                             >
                               <Plus className="h-4 w-4" />
@@ -903,18 +1193,6 @@ export default function Sidebar() {
                                 ))}
                               </>
                             )}
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleMoveDrawingToFolder(
-                                  drawing.drawingId,
-                                  null
-                                )
-                              }}
-                            >
-                              Remove from folder
-                            </DropdownMenuItem>
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
                         <DropdownMenuItem
@@ -1004,6 +1282,26 @@ export default function Sidebar() {
               </div>
             )}
           </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Folder Dialog */}
+      <Dialog open={newFolderDialogOpen} onOpenChange={setNewFolderDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create New Folder</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Input
+              ref={newFolderDialogInputRef}
+              placeholder="Folder name"
+              value={newFolderDialogName}
+              onChange={(e) => setNewFolderDialogName(e.target.value)}
+              onBlur={handleNewFolderDialogBlur}
+              onKeyDown={handleNewFolderDialogKeyDown}
+              autoFocus
+            />
+          </div>
         </DialogContent>
       </Dialog>
     </>
