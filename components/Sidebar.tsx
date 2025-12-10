@@ -48,6 +48,7 @@ export default function Sidebar() {
   const createNewDrawing = () => {
     const newId = crypto.randomUUID()
     setCurrentDrawingId(newId)
+    setIsOpen(false)
   }
 
   const startEditing = (
@@ -193,6 +194,7 @@ export default function Sidebar() {
                       onClick={() => {
                         if (!isEditing) {
                           setCurrentDrawingId(drawing.drawingId)
+                          setIsOpen(false)
                         }
                       }}
                       value={isEditing ? editingName : drawing.name}
@@ -278,6 +280,7 @@ export default function Sidebar() {
                         setCurrentDrawingId(drawing.drawingId)
                         setSearchDialogOpen(false)
                         setSearchQuery("")
+                        setIsOpen(false)
                       }}
                       variant={isActive ? "secondary" : "ghost"}
                       className="w-full justify-start"

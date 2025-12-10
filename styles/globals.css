@@ -135,8 +135,8 @@
   left: 46px !important;
 }
 
-.dropdown-menu-group,
-.dropdown-menu-group ~ div {
+.Island.dropdown-menu-container > div:nth-of-type(1),
+.Island.dropdown-menu-container > div:nth-of-type(2) {
   display: none !important;
 }
 

@@ -1,71 +1,110 @@
 "use client"
 
-import { useConvexAuth, useQuery, useMutation } from "convex/react"
+import { useQuery, useMutation } from "convex/react"
 import { api } from "../convex/_generated/api"
-import { useEffect, useRef, useMemo, useCallback } from "react"
+import { useEffect, useRef, useMemo, useCallback, useState } from "react"
 import dynamic from "next/dynamic"
 import "@excalidraw/excalidraw/index.css"
 import { useDrawing } from "../context/DrawingContext"
-import Connecting from "./Connecting"
+import { AppState } from "@excalidraw/excalidraw/types"
+import { OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types"
+import { cn } from "@/lib/utils"
 
-function serializeAppState(appState: any): any {
-  if (appState === null || appState === undefined) {
-    return appState
+// Type for JSON-serializable AppState (after serialization)
+type SerializedAppState = {
+  [key: string]: unknown
+}
+
+// Type for the drawing data returned from Convex
+type DrawingData = {
+  _id: string
+  _creationTime: number
+  userId: string
+  drawingId: string
+  name: string
+  elements: readonly OrderedExcalidrawElement[] | null
+  appState: SerializedAppState | null
+} | null
+
+// Helper function to serialize any value (handles nested structures)
+function serializeValue(value: unknown): unknown {
+  if (value === null || value === undefined) {
+    return value
   }
 
-  if (appState instanceof Set) {
-    return Array.from(appState)
+  if (value instanceof Set) {
+    return Array.from(value).map(serializeValue)
   }
 
-  if (appState instanceof Map) {
-    return Object.fromEntries(appState)
+  if (value instanceof Map) {
+    return Object.fromEntries(
+      Array.from(value.entries()).map(([k, v]) => [k, serializeValue(v)])
+    )
   }
 
-  if (Array.isArray(appState)) {
-    return appState.map(serializeAppState)
+  if (Array.isArray(value)) {
+    return value.map(serializeValue)
   }
 
-  if (typeof appState === "object") {
-    const serialized: any = {}
-    for (const key in appState) {
-      if (Object.prototype.hasOwnProperty.call(appState, key)) {
-        serialized[key] = serializeAppState(appState[key])
+  if (typeof value === "object") {
+    const serialized: SerializedAppState = {}
+    for (const key in value) {
+      if (Object.prototype.hasOwnProperty.call(value, key)) {
+        serialized[key] = serializeValue(
+          (value as Record<string, unknown>)[key]
+        )
       }
     }
     return serialized
   }
 
-  return appState
+  return value
 }
 
-function deserializeAppState(appState: any): any {
-  if (appState === null || appState === undefined) {
-    return appState
+function serializeAppState(
+  appState: AppState | null | undefined
+): SerializedAppState | null | undefined {
+  const serialized = serializeValue(appState)
+  return serialized as SerializedAppState | null | undefined
+}
+
+// Helper function to deserialize any value (handles nested structures)
+function deserializeValue(value: unknown): unknown {
+  if (value === null || value === undefined) {
+    return value
   }
 
-  if (Array.isArray(appState)) {
-    return appState.map(deserializeAppState)
+  if (Array.isArray(value)) {
+    return value.map(deserializeValue)
   }
 
-  if (typeof appState === "object") {
-    const deserialized: any = {}
-    for (const key in appState) {
-      if (Object.prototype.hasOwnProperty.call(appState, key)) {
+  if (typeof value === "object") {
+    const deserialized: Record<string, unknown> = {}
+    for (const key in value) {
+      if (Object.prototype.hasOwnProperty.call(value, key)) {
+        const val = (value as Record<string, unknown>)[key]
         // Convert followedBy back to Set if it's an array
-        if (key === "followedBy" && Array.isArray(appState[key])) {
-          deserialized[key] = new Set(appState[key])
+        if (key === "followedBy" && Array.isArray(val)) {
+          deserialized[key] = new Set(val.map(deserializeValue))
         } else if (key === "collaborators") {
           // Remove collaborators to prevent Map vs Object crash
           deserialized[key] = undefined
         } else {
-          deserialized[key] = deserializeAppState(appState[key])
+          deserialized[key] = deserializeValue(val)
         }
       }
     }
     return deserialized
   }
 
-  return appState
+  return value
+}
+
+function deserializeAppState(
+  appState: SerializedAppState | null | undefined
+): Partial<AppState> | null | undefined {
+  const deserialized = deserializeValue(appState)
+  return deserialized as Partial<AppState> | null | undefined
 }
 
 const Excalidraw = dynamic(
@@ -75,15 +114,18 @@ const Excalidraw = dynamic(
 
 function useDebouncedCallback(
   callback: (
-    elements: readonly any[],
-    appState: any,
+    elements: readonly OrderedExcalidrawElement[],
+    appState: AppState,
+    // files: BinaryFiles,
     drawingId: string | null
   ) => void,
-  delay: number = 1000
+  delay: number = 500
 ) {
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const pendingElementsRef = useRef<readonly any[] | null>(null)
-  const pendingAppStateRef = useRef<any>(null)
+  const pendingElementsRef = useRef<readonly OrderedExcalidrawElement[] | null>(
+    null
+  )
+  const pendingAppStateRef = useRef<AppState | null>(null)
   const pendingDrawingIdRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -95,7 +137,11 @@ function useDebouncedCallback(
   }, [])
 
   const debouncedCall = useCallback(
-    (elements: readonly any[], appState: any, drawingId: string | null) => {
+    (
+      elements: readonly OrderedExcalidrawElement[],
+      appState: AppState,
+      drawingId: string | null
+    ) => {
       // Store the latest values along with the drawingId
       pendingElementsRef.current = elements
       pendingAppStateRef.current = appState
@@ -149,31 +195,191 @@ function useDebouncedCallback(
 }
 
 export default function Canvas() {
-  const { isAuthenticated } = useConvexAuth()
   const { currentDrawingId: drawingId } = useDrawing()
   const saveDrawing = useMutation(api.drawings.save)
   // Track the current drawing ID to detect drawing changes
   const lastDrawingIdRef = useRef<string | null>(null)
+  // Track the last loaded drawing data to show while new drawing loads
+  const lastDrawingDataRef = useRef<{
+    drawingId: string | null
+    data: DrawingData
+  }>({
+    drawingId: null,
+    data: null
+  })
+
+  // State for dual Excalidraw instances with crossfade
+  const [drawing01, setDrawing01] = useState<{
+    drawingId: string | null
+    data: DrawingData
+  } | null>(null)
+  const [drawing02, setDrawing02] = useState<{
+    drawingId: string | null
+    data: DrawingData
+  } | null>(null)
+  const [beforeAppearingBox01Fade, setBeforeAppearingBox01Fade] = useState<
+    boolean | null
+  >(null)
+  const [beforeAppearingBox02Fade, setBeforeAppearingBox02Fade] = useState<
+    boolean | null
+  >(null)
+  const [fadingOutBox02, setFadingOutBox02] = useState(false)
+  const [fadingOutBox01, setFadingOutBox01] = useState(false)
+
+  // Refs to track current box states without causing effect re-runs
+  const drawing01Ref = useRef(drawing01)
+  const drawing02Ref = useRef(drawing02)
+  // Ref to track the current fade timeout so we can cancel it if a new transition starts
+  const fadeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    drawing01Ref.current = drawing01
+  }, [drawing01])
+
+  useEffect(() => {
+    drawing02Ref.current = drawing02
+  }, [drawing02])
 
   // Query drawing data if we have an ID
-  const drawing = useQuery(
-    api.drawings.get,
-    drawingId && isAuthenticated ? { drawingId } : "skip"
-  )
+  const drawing = useQuery(api.drawings.get, drawingId ? { drawingId } : "skip")
 
-  // Reset when drawing changes
+  // Update last loaded drawing data when drawing loads for the current drawingId
   useEffect(() => {
-    if (drawingId !== lastDrawingIdRef.current) {
-      lastDrawingIdRef.current = drawingId
+    if (drawing !== undefined && drawingId) {
+      lastDrawingDataRef.current = { drawingId, data: drawing }
     }
-  }, [drawingId])
+  }, [drawing, drawingId])
 
-  // Theme sync removed - page theme is always dark, canvas theme is independent
+  // Handle drawing transitions with crossfade animation
+  // Note: We intentionally set state synchronously here to ensure the new drawing
+  // is rendered behind (z-10) before starting the fade animation on the old drawing.
+  // This is necessary for the crossfade transition to work correctly.
+  // The linter warning about setState in effects is expected and acceptable here.
+  useEffect(() => {
+    // Only proceed if drawing is loaded (not undefined) and we have a drawingId
+    if (drawing === undefined || !drawingId) {
+      return
+    }
+
+    // Skip if this drawing is already displayed in one of the boxes
+    // Use refs to get current values without triggering effect re-runs
+    if (
+      drawing01Ref.current?.drawingId === drawingId ||
+      drawing02Ref.current?.drawingId === drawingId
+    ) {
+      return
+    }
+
+    const newDrawingData = { drawingId, data: drawing }
+
+    // Cancel any pending fade timeout from a previous transition
+    // This prevents race conditions when switching quickly
+    if (fadeTimeoutRef.current) {
+      clearTimeout(fadeTimeoutRef.current)
+      fadeTimeoutRef.current = null
+      // Reset fade states that might be stuck from previous transition
+      // This ensures clean state for the new transition
+      setFadingOutBox01(false)
+      setFadingOutBox02(false)
+      setBeforeAppearingBox01Fade(null)
+      setBeforeAppearingBox02Fade(null)
+    }
+
+    // Check if drawing01 is occupied (use refs to avoid dependency issues)
+    const isBox01Occupied = drawing01Ref.current !== null
+
+    if (!isBox01Occupied) {
+      // Box 01 is empty, use it for the new drawing
+      // Step 1 & 2: Set state synchronously using React's automatic batching
+      // Set beforeAppearingBox01Fade to true (will render with z-10, behind)
+      // and set the loaded drawing to box 01
+      setBeforeAppearingBox01Fade(true)
+      setDrawing01(newDrawingData)
+
+      // Step 3: If drawing02 exists, fade it out
+      if (drawing02Ref.current !== null) {
+        // Start fade out animation on drawing02 (it stays at z-20 but fades out)
+        setFadingOutBox02(true)
+
+        // Step 4: After fade completes, clean up
+        fadeTimeoutRef.current = setTimeout(() => {
+          // After drawing02 fades out completely:
+          // - Set beforeAppearingBox01Fade to null (box01 gets z-20 and becomes visible)
+          // - Set drawing02 to null (make it available for next drawing)
+          setBeforeAppearingBox01Fade(null)
+          setDrawing02(null)
+          setBeforeAppearingBox02Fade(null)
+          setFadingOutBox02(false)
+          fadeTimeoutRef.current = null
+        }, 500) // Match the CSS transition duration
+
+        return () => {
+          if (fadeTimeoutRef.current) {
+            clearTimeout(fadeTimeoutRef.current)
+            fadeTimeoutRef.current = null
+          }
+        }
+      } else {
+        // No drawing02 to fade, immediately make box01 visible
+        // Use setTimeout to avoid synchronous setState in effect
+        setTimeout(() => {
+          setBeforeAppearingBox01Fade(null)
+        }, 0)
+      }
+    } else {
+      // Box 01 is occupied, use box 02
+      // Step 1 & 2: Set state synchronously using React's automatic batching
+      // Set beforeAppearingBox02Fade to true (will render with z-10, behind)
+      // and set the loaded drawing to box 02
+      setBeforeAppearingBox02Fade(true)
+      setDrawing02(newDrawingData)
+
+      // Step 3: Fade out drawing01
+      if (drawing01Ref.current !== null) {
+        // Start fade out animation on drawing01 (it stays at z-20 but fades out)
+        setFadingOutBox01(true)
+
+        // Step 4: After fade completes, clean up
+        fadeTimeoutRef.current = setTimeout(() => {
+          // After drawing01 fades out completely:
+          // - Set beforeAppearingBox02Fade to null (box02 gets z-20 and becomes visible)
+          // - Set drawing01 to null (make it available for next drawing)
+          setBeforeAppearingBox02Fade(null)
+          setDrawing01(null)
+          setBeforeAppearingBox01Fade(null)
+          setFadingOutBox01(false)
+          fadeTimeoutRef.current = null
+        }, 500) // Match the CSS transition duration
+
+        return () => {
+          if (fadeTimeoutRef.current) {
+            clearTimeout(fadeTimeoutRef.current)
+            fadeTimeoutRef.current = null
+          }
+        }
+      } else {
+        // No drawing01 to fade, immediately make box02 visible
+        // Use setTimeout to avoid synchronous setState in effect
+        setTimeout(() => {
+          setBeforeAppearingBox02Fade(null)
+        }, 0)
+      }
+    }
+    // Note: We intentionally exclude drawing01 and drawing02 from dependencies
+    // to prevent the effect from re-running when we update them, which would
+    // cancel the fade timeout before it can complete.
+    // We use refs (drawing01Ref, drawing02Ref) to access current values instead.
+  }, [drawing, drawingId])
 
   // Debounced handler that performs the save mutation
   const { debouncedCall: handleSave, flush: flushSave } = useDebouncedCallback(
-    (elements, appState, idToSave) => {
-      if (isAuthenticated && idToSave) {
+    (
+      elements: readonly OrderedExcalidrawElement[],
+      appState: AppState,
+      idToSave: string | null
+    ) => {
+      if (idToSave) {
         const serializedAppState = serializeAppState(appState)
         void saveDrawing({
           drawingId: idToSave,
@@ -185,36 +391,56 @@ export default function Canvas() {
     1000
   )
 
-  // Flush pending saves when drawing is about to change
+  // Flush pending saves when drawing changes
   useEffect(() => {
     const previousDrawingId = lastDrawingIdRef.current
     if (previousDrawingId && previousDrawingId !== drawingId) {
       // Drawing is about to change, flush any pending saves for the previous drawing
       flushSave()
     }
+    lastDrawingIdRef.current = drawingId
   }, [drawingId, flushSave])
 
-  // Handler that saves with debounce (theme sync removed - canvas theme is independent)
-  const handleChange = (elements: readonly any[], appState: any) => {
-    // Save with debounce, passing the current drawingId
+  // Handler that saves with debounce
+  const handleChange = (
+    elements: readonly OrderedExcalidrawElement[],
+    appState: AppState
+    // files: BinaryFiles
+  ) => {
     handleSave(elements, appState, drawingId)
   }
 
-  // Compute initial data - show empty canvas immediately, inject data when available
-  // Use saved theme from drawing if available, otherwise default to light
-  const initialData = useMemo(() => {
-    // Default theme for new drawings (canvas can be light or dark independently)
-    const defaultCanvasTheme: "light" | "dark" = "light"
+  // Create change handlers for each box that capture the correct drawingId
+  const handleChange01 = useCallback(
+    (elements: readonly OrderedExcalidrawElement[], appState: AppState) => {
+      if (drawing01?.drawingId) {
+        handleSave(elements, appState, drawing01.drawingId)
+      }
+    },
+    [drawing01, handleSave]
+  )
 
-    // If we have drawing data, use it and preserve saved theme if it exists
-    if (drawing !== undefined && drawing !== null) {
-      const deserializedAppState = deserializeAppState(drawing.appState)
+  const handleChange02 = useCallback(
+    (elements: readonly OrderedExcalidrawElement[], appState: AppState) => {
+      if (drawing02?.drawingId) {
+        handleSave(elements, appState, drawing02.drawingId)
+      }
+    },
+    [drawing02, handleSave]
+  )
+
+  // Helper to compute initial data for a specific drawing
+  const computeInitialData = useCallback((drawingData: DrawingData | null) => {
+    const defaultCanvasTheme: "light" | "dark" = "dark"
+
+    if (drawingData !== null && drawingData !== undefined) {
+      const deserializedAppState = deserializeAppState(drawingData.appState)
 
       // Remove collaborators to prevent Map vs Object crash
-      let cleanAppState = deserializedAppState
+      let cleanAppState: Partial<AppState> = deserializedAppState || {}
       if (deserializedAppState && typeof deserializedAppState === "object") {
         cleanAppState = { ...deserializedAppState }
-        delete cleanAppState.collaborators
+        delete (cleanAppState as { collaborators?: unknown }).collaborators
       }
 
       // Ensure appState is an object
@@ -228,7 +454,7 @@ export default function Canvas() {
       }
 
       return {
-        elements: drawing.elements ?? null,
+        elements: drawingData.elements ?? null,
         appState: cleanAppState,
         scrollToContent: true
       }
@@ -238,48 +464,73 @@ export default function Canvas() {
     return {
       elements: null,
       appState: {
-        viewBackgroundColor:
-          defaultCanvasTheme === "dark" ? "#1e1e1e" : "#ffffff",
         theme: defaultCanvasTheme
       },
       scrollToContent: true
     }
-  }, [drawing])
+  }, [])
 
-  // Determine effective theme for key (to force remount when drawing or theme changes)
-  // Use saved theme from drawing if available, otherwise default to light
-  // Must be computed before early returns
-  const effectiveTheme = useMemo(() => {
-    if (drawing?.appState) {
-      const deserializedAppState = deserializeAppState(drawing.appState)
-      if (deserializedAppState?.theme) {
-        return deserializedAppState.theme
-      }
-    }
-    return "light"
-  }, [drawing])
+  // Compute initial data for each box
+  const initialData01 = useMemo(
+    () => computeInitialData(drawing01?.data ?? null),
+    [drawing01, computeInitialData]
+  )
+  const initialData02 = useMemo(
+    () => computeInitialData(drawing02?.data ?? null),
+    [drawing02, computeInitialData]
+  )
 
-  // --- Render Logic ---
-
-  // Display placeholder if authenticated but no drawing is currently selected/loaded
-  if (!isAuthenticated || !drawingId) {
-    return <Connecting />
+  // If no drawingId, show empty canvas
+  if (!drawingId) {
+    const emptyData = computeInitialData(null)
+    return (
+      <div className="h-full w-full">
+        <Excalidraw initialData={emptyData} onChange={handleChange} />
+      </div>
+    )
   }
 
-  // Use a key that includes drawingId, data state, and theme
-  // This ensures we re-initialize when switching drawings, when data arrives, or when theme changes
-  const canvasKey =
-    drawing !== undefined && drawing !== null
-      ? `${drawingId}-loaded-${effectiveTheme}`
-      : `${drawingId}-empty-${effectiveTheme}`
-
   return (
-    <div className="h-full w-full">
-      <Excalidraw
-        key={canvasKey}
-        initialData={initialData}
-        onChange={handleChange}
-      />
+    <div className="h-full w-full relative">
+      {/* drawing box 01 */}
+      {drawing01 && (
+        <div
+          className={cn(
+            "absolute top-0 left-0 h-full w-full transition-opacity duration-500",
+            beforeAppearingBox01Fade === true
+              ? "z-10 opacity-100"
+              : fadingOutBox01
+                ? "z-20 opacity-0"
+                : "z-20 opacity-100"
+          )}
+        >
+          <Excalidraw
+            key={`drawing01-${drawing01.drawingId}`}
+            initialData={initialData01}
+            onChange={handleChange01}
+          />
+        </div>
+      )}
+
+      {/* drawing box 02 */}
+      {drawing02 && (
+        <div
+          className={cn(
+            "absolute top-0 left-0 h-full w-full transition-opacity duration-500",
+            beforeAppearingBox02Fade === true
+              ? "z-10 opacity-100"
+              : fadingOutBox02
+                ? "z-20 opacity-0"
+                : "z-20 opacity-100"
+          )}
+        >
+          <Excalidraw
+            key={`drawing02-${drawing02.drawingId}`}
+            initialData={initialData02}
+            onChange={handleChange02}
+          />
+        </div>
+      )}
     </div>
   )
 }
