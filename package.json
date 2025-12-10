@@ -9,8 +9,7 @@
     "predev": "convex dev --until-success && convex dev --once --run-sh \"node setup.mjs --once\" && convex dashboard",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint . --ignore-pattern \"convex/_generated/**\"",
-    "migrate:files": "convex run migrations:migrateFilesField"
+    "lint": "eslint . --ignore-pattern \"convex/_generated/**\""
   },
   "dependencies": {
     "@convex-dev/auth": "^0.0.90",
