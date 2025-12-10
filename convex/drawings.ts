@@ -2,13 +2,14 @@ import { v } from "convex/values"
 import {
   query,
   mutation,
+  action,
   internalMutation,
   internalQuery,
   internalAction
 } from "./_generated/server"
 import { getAuthUserId } from "@convex-dev/auth/server"
 import { Id } from "./_generated/dataModel"
-import { internal } from "./_generated/api"
+import { api, internal } from "./_generated/api"
 
 // Helper function to update user storage total
 async function updateUserStorage(ctx: any, userId: string, bytesDelta: number) {
@@ -29,78 +30,69 @@ async function updateUserStorage(ctx: any, userId: string, bytesDelta: number) {
   }
 }
 
+// Helper to convert diverse payloads coming from Excalidraw into blobs
+function toBlob(fileData: any): Blob | null {
+  if (!fileData) return null
+
+  if (fileData instanceof Blob) {
+    return fileData
+  }
+
+  if (fileData.dataURL) {
+    const dataURL: string = fileData.dataURL
+    const base64Match = dataURL.match(/^data:([^;]+);base64,(.+)$/)
+    const base64Data = base64Match
+      ? base64Match[2]
+      : (dataURL.split(",")[1] ?? dataURL)
+    const mimeType =
+      base64Match?.[1] ?? fileData.mimeType ?? "application/octet-stream"
+    const binary = atob(base64Data)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i)
+    }
+    return new Blob([bytes], { type: mimeType })
+  }
+
+  if (fileData.mimeType && fileData.data) {
+    const base64Data =
+      typeof fileData.data === "string"
+        ? (fileData.data.split(",")[1] ?? fileData.data)
+        : fileData.data
+    const binary = atob(base64Data)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i)
+    }
+    return new Blob([bytes], { type: fileData.mimeType })
+  }
+
+  try {
+    const jsonString = JSON.stringify(fileData)
+    return new Blob([jsonString], { type: "application/json" })
+  } catch {
+    return null
+  }
+}
+
 // Helper function to upload files and return storage IDs mapped by fileId
 async function uploadFiles(
   ctx: any,
   files: Record<string, any>
-): Promise<Record<string, Id<"_storage">>> {
+): Promise<{ fileMap: Record<string, Id<"_storage">>; totalBytes: number }> {
   const fileMap: Record<string, Id<"_storage">> = {}
+  let totalBytes = 0
 
   for (const [fileId, fileData] of Object.entries(files)) {
-    if (!fileData) continue
-
-    // Convert file data to Blob
-    // Excalidraw BinaryFiles can have different structures, handle common cases
-    let blob: Blob
-
-    if (fileData instanceof Blob) {
-      blob = fileData
-    } else if (fileData.dataURL) {
-      // If it's a data URL, convert directly to blob
-      // Data URLs are in format: data:mimeType;base64,base64data
-      const dataURL = fileData.dataURL
-      const base64Match = dataURL.match(/^data:([^;]+);base64,(.+)$/)
-      if (base64Match) {
-        const mimeType = base64Match[1]
-        const base64Data = base64Match[2]
-        const binaryString = atob(base64Data)
-        const bytes = new Uint8Array(binaryString.length)
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i)
-        }
-        blob = new Blob([bytes], { type: mimeType })
-      } else {
-        // Try to extract mimeType from fileData if available
-        const mimeType = fileData.mimeType || "application/octet-stream"
-        // Assume the dataURL is just base64 data
-        const base64Data = dataURL.includes(",")
-          ? dataURL.split(",")[1]
-          : dataURL
-        const binaryString = atob(base64Data)
-        const bytes = new Uint8Array(binaryString.length)
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i)
-        }
-        blob = new Blob([bytes], { type: mimeType })
-      }
-    } else if (fileData.mimeType && fileData.data) {
-      // If it has mimeType and data, create blob from data
-      const base64Data =
-        typeof fileData.data === "string"
-          ? fileData.data.split(",")[1] || fileData.data
-          : fileData.data
-      const binaryString = atob(base64Data)
-      const bytes = new Uint8Array(binaryString.length)
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i)
-      }
-      blob = new Blob([bytes], { type: fileData.mimeType })
-    } else {
-      // Try to convert to JSON and then to blob
-      try {
-        const jsonString = JSON.stringify(fileData)
-        blob = new Blob([jsonString], { type: "application/json" })
-      } catch {
-        // Skip files we can't process
-        continue
-      }
-    }
+    const blob = toBlob(fileData)
+    if (!blob) continue
 
     const storageId = await ctx.storage.store(blob)
+    totalBytes += blob.size
     fileMap[fileId] = storageId
   }
 
-  return fileMap
+  return { fileMap, totalBytes }
 }
 
 // Helper function to get file URLs from storage ID map
@@ -142,7 +134,7 @@ export const save = mutation({
     drawingId: v.string(),
     elements: v.any(),
     appState: v.any(),
-    files: v.optional(v.any()) // BinaryFiles from Excalidraw
+    files: v.optional(v.record(v.string(), v.id("_storage"))) // Map of fileId -> storageId
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -159,61 +151,11 @@ export const save = mutation({
       )
       .first()
 
-    // Handle file uploads
-    let newFileMap: Record<string, Id<"_storage">> | undefined = undefined
-    let oldFileMap: Record<string, Id<"_storage">> | undefined = undefined
-    let bytesDelta = 0
-
-    if (args.files && typeof args.files === "object") {
-      try {
-        // Upload new files
-        newFileMap = await uploadFiles(ctx, args.files as Record<string, any>)
-
-        // Calculate size of new files
-        for (const storageId of Object.values(newFileMap)) {
-          const metadata = await ctx.db.system.get(storageId)
-          if (metadata && "size" in metadata) {
-            bytesDelta += metadata.size as number
-          }
-        }
-      } catch (error) {
-        console.error("Error uploading files:", error)
-        // Continue without files if upload fails
-      }
-    }
-
-    // Get old file IDs if updating existing drawing
-    if (existing && existing.files) {
-      oldFileMap = existing.files
-
-      // Calculate size of old files to subtract
-      for (const storageId of Object.values(oldFileMap)) {
-        const metadata = await ctx.db.system.get(storageId)
-        if (metadata && "size" in metadata) {
-          bytesDelta -= metadata.size as number
-        }
-      }
-
-      // Delete old files from storage
-      for (const storageId of Object.values(oldFileMap)) {
-        try {
-          await ctx.storage.delete(storageId)
-        } catch (error) {
-          console.error("Error deleting old file:", error)
-        }
-      }
-    }
-
-    // Update user storage total
-    if (bytesDelta !== 0) {
-      await updateUserStorage(ctx, userIdString, bytesDelta)
-    }
-
     if (existing) {
       await ctx.db.patch(existing._id, {
         elements: args.elements,
         appState: args.appState,
-        files: newFileMap
+        files: args.files
       })
     } else {
       await ctx.db.insert("drawings", {
@@ -222,10 +164,120 @@ export const save = mutation({
         name: "Draw",
         elements: args.elements,
         appState: args.appState,
-        files: newFileMap,
+        files: args.files,
         isActive: true
       })
     }
+
+    return null
+  }
+})
+
+export const saveWithFiles = action({
+  args: {
+    drawingId: v.string(),
+    elements: v.any(),
+    appState: v.any(),
+    files: v.optional(v.any()) // BinaryFiles from Excalidraw
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx)
+    if (userId === null) {
+      throw new Error("Unauthorized")
+    }
+
+    const userIdString = String(userId)
+
+    const existing = await ctx.runQuery(internal.drawings.getDrawingWithFiles, {
+      drawingId: args.drawingId,
+      userId: userIdString
+    })
+
+    if (existing && existing.isActive === false) {
+      throw new Error("Drawing not found")
+    }
+
+    let newFileMap: Record<string, Id<"_storage">> | undefined = undefined
+    let bytesDelta = 0
+
+    const providedFiles =
+      args.files &&
+      typeof args.files === "object" &&
+      Object.keys(args.files).length > 0
+
+    if (providedFiles) {
+      const incomingFiles = args.files as Record<string, any>
+      const existingFiles = existing?.files ?? {}
+      const mergedFileMap: Record<string, Id<"_storage">> = {}
+
+      // 1) Keep existing files that are still present (no re-upload)
+      for (const [fileId, storageId] of Object.entries(existingFiles)) {
+        if (incomingFiles[fileId]) {
+          mergedFileMap[fileId] = storageId
+        }
+      }
+
+      // 2) Upload only truly new files (ids not already stored)
+      const filesToUpload: Record<string, any> = {}
+      for (const [fileId, fileData] of Object.entries(incomingFiles)) {
+        if (!existingFiles[fileId]) {
+          filesToUpload[fileId] = fileData
+        }
+      }
+
+      try {
+        const { fileMap, totalBytes } =
+          Object.keys(filesToUpload).length > 0
+            ? await uploadFiles(ctx, filesToUpload)
+            : { fileMap: {}, totalBytes: 0 }
+
+        newFileMap = { ...mergedFileMap, ...fileMap }
+        bytesDelta += totalBytes
+      } catch (error) {
+        console.error("Error uploading files:", error)
+      }
+
+      // 3) Delete files that were removed from the drawing
+      for (const [fileId, storageId] of Object.entries(existingFiles)) {
+        if (!incomingFiles[fileId]) {
+          try {
+            const size: number = await ctx.runQuery(
+              internal.drawings.getFileSize,
+              {
+                storageId
+              }
+            )
+            bytesDelta -= size
+          } catch (error) {
+            console.error("Error getting old file size:", error)
+          }
+
+          try {
+            await ctx.storage.delete(storageId)
+          } catch (error) {
+            if ((error as Error)?.message?.includes("not found")) {
+              continue
+            }
+            console.error("Error deleting old file:", error)
+          }
+        }
+      }
+    }
+
+    if (bytesDelta !== 0) {
+      await ctx.runMutation(internal.drawings.updateUserStorageInternal, {
+        userId: userIdString,
+        bytesDelta
+      })
+    }
+
+    await ctx.runMutation(api.drawings.save, {
+      drawingId: args.drawingId,
+      elements: args.elements,
+      appState: args.appState,
+      files: newFileMap ?? existing?.files ?? undefined
+    })
 
     return null
   }
@@ -445,7 +497,8 @@ export const getDrawingWithFiles = internalQuery({
   returns: v.union(
     v.object({
       _id: v.id("drawings"),
-      files: v.optional(v.record(v.string(), v.id("_storage")))
+      files: v.optional(v.record(v.string(), v.id("_storage"))),
+      isActive: v.optional(v.boolean())
     }),
     v.null()
   ),
@@ -463,7 +516,8 @@ export const getDrawingWithFiles = internalQuery({
 
     return {
       _id: drawing._id,
-      files: drawing.files
+      files: drawing.files,
+      isActive: drawing.isActive
     }
   }
 })

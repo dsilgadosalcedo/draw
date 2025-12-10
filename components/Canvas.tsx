@@ -1,6 +1,6 @@
 "use client"
 
-import { useQuery, useMutation } from "convex/react"
+import { useAction, useQuery } from "convex/react"
 import { api } from "../convex/_generated/api"
 import { useEffect, useRef, useMemo, useCallback, useState } from "react"
 import dynamic from "next/dynamic"
@@ -206,7 +206,7 @@ function useDebouncedCallback(
 
 export default function Canvas() {
   const { currentDrawingId: drawingId } = useDrawing()
-  const saveDrawing = useMutation(api.drawings.save)
+  const saveDrawing = useAction(api.drawings.saveWithFiles)
   // Track the current drawing ID to detect drawing changes
   const lastDrawingIdRef = useRef<string | null>(null)
   // Track the last loaded drawing data to show while new drawing loads
@@ -397,7 +397,9 @@ export default function Canvas() {
           elements,
           appState: serializedAppState,
           files
-        }).catch((err) => console.error("Failed to auto-save drawing:", err))
+        }).catch((err) => {
+          console.error("Failed to auto-save drawing:", err)
+        })
       }
     },
     1000
@@ -504,6 +506,7 @@ export default function Canvas() {
           console.error("Error loading file:", error)
         }
       }
+
       return loadedFiles
     },
     []
@@ -581,6 +584,30 @@ export default function Canvas() {
     [drawing02, files02, computeInitialData]
   )
 
+  const keyWithFiles = useCallback(
+    (drawingId: string | null, files?: BinaryFiles) => {
+      const version =
+        files && Object.keys(files).length > 0
+          ? `files-${Object.keys(files).sort().join("-")}`
+          : "nofiles"
+      return drawingId ? `${drawingId}-${version}` : "empty"
+    },
+    []
+  )
+
+  const isReadyWithFiles = useCallback(
+    (
+      drawingEntry: { data: DrawingData } | null,
+      files?: BinaryFiles
+    ): boolean => {
+      const urls = drawingEntry?.data?.files
+      if (!urls || Object.keys(urls).length === 0) return true
+      if (!files) return false
+      return Object.keys(files).length === Object.keys(urls).length
+    },
+    []
+  )
+
   // If no drawingId, show empty canvas
   if (!drawingId) {
     const emptyData = computeInitialData(null)
@@ -594,7 +621,7 @@ export default function Canvas() {
   return (
     <div className="h-full w-full relative">
       {/* drawing box 01 */}
-      {drawing01 && (
+      {drawing01 && isReadyWithFiles(drawing01, files01) && (
         <div
           className={cn(
             "absolute top-0 left-0 h-full w-full transition-opacity duration-500",
@@ -606,7 +633,7 @@ export default function Canvas() {
           )}
         >
           <Excalidraw
-            key={`drawing01-${drawing01.drawingId}`}
+            key={keyWithFiles(drawing01.drawingId, files01)}
             initialData={initialData01}
             onChange={handleChange01}
           />
@@ -614,7 +641,7 @@ export default function Canvas() {
       )}
 
       {/* drawing box 02 */}
-      {drawing02 && (
+      {drawing02 && isReadyWithFiles(drawing02, files02) && (
         <div
           className={cn(
             "absolute top-0 left-0 h-full w-full transition-opacity duration-500",
@@ -626,7 +653,7 @@ export default function Canvas() {
           )}
         >
           <Excalidraw
-            key={`drawing02-${drawing02.drawingId}`}
+            key={keyWithFiles(drawing02.drawingId, files02)}
             initialData={initialData02}
             onChange={handleChange02}
           />
