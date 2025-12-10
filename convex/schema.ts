@@ -13,7 +13,8 @@ export default defineSchema({
     name: v.string(),
     elements: v.any(),
     appState: v.any(),
-    files: v.optional(v.record(v.string(), v.id("_storage"))) // Map of fileId -> storageId
+    files: v.optional(v.record(v.string(), v.id("_storage"))), // Map of fileId -> storageId
+    isActive: v.optional(v.boolean())
   })
     .index("by_userId", ["userId"])
     .index("by_userId_and_drawingId", ["userId", "drawingId"]),

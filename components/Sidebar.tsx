@@ -125,8 +125,7 @@ export default function Sidebar() {
 
   const handleRemove = async (drawingId: string) => {
     try {
-      await removeDrawing({ drawingId })
-      // If the deleted drawing is the current one, switch to another drawing
+      // Step 1: First redirect to another drawing if needed
       if (drawingId === currentDrawingId) {
         if (drawings && drawings.length > 1) {
           // Find the first drawing that's not the one being deleted
@@ -139,6 +138,10 @@ export default function Sidebar() {
           createNewDrawing()
         }
       }
+
+      // Step 2: Then call the remove mutation
+      // The UI will automatically update when the query refetches (since isActive is now false)
+      await removeDrawing({ drawingId })
     } catch (error) {
       console.error("Failed to remove drawing:", error)
     }
