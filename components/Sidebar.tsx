@@ -9,7 +9,6 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Plus,
   Pencil,
-  PanelLeftCloseIcon,
   PanelRightCloseIcon,
   LogOut,
   LineSquiggleIcon,
@@ -20,20 +19,14 @@ import { cn } from "@/lib/utils"
 import { Input } from "./ui/input"
 import { useAuthActions } from "@convex-dev/auth/react"
 import { useRouter } from "next/navigation"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription
-} from "./ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog"
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 
 export default function Sidebar() {
   const { currentDrawingId, setCurrentDrawingId } = useDrawing()
   const drawings = useQuery(api.drawings.list)
   const updateName = useMutation(api.drawings.updateName)
-  const [isOpen, setIsOpen] = useState(true)
+  const [isOpen, setIsOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState("")
   const [searchDialogOpen, setSearchDialogOpen] = useState(false)
@@ -145,7 +138,7 @@ export default function Sidebar() {
       >
         <div className="flex flex-col h-full">
           {/* Header with Collapse Button & New Button */}
-          <header className="flex flex-col items-center gap-2 py-2">
+          <header className="flex flex-col items-center gap-2 pt-5 pb-2">
             <div className="flex items-center gap-2 justify-between w-full px-2">
               <Button variant="ghost" size="icon">
                 <LineSquiggleIcon className="size-5" />

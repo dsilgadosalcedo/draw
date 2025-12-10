@@ -7,7 +7,6 @@ import dynamic from "next/dynamic"
 import "@excalidraw/excalidraw/index.css"
 import { useDrawing } from "../context/DrawingContext"
 import Connecting from "./Connecting"
-import { useTheme } from "next-themes"
 
 function serializeAppState(appState: any): any {
   if (appState === null || appState === undefined) {
@@ -153,12 +152,6 @@ export default function Canvas() {
   const { isAuthenticated } = useConvexAuth()
   const { currentDrawingId: drawingId } = useDrawing()
   const saveDrawing = useMutation(api.drawings.save)
-  const { theme: currentTheme, resolvedTheme, setTheme } = useTheme()
-
-  // Track if we're initializing to prevent theme syncs during initialization
-  const isInitializingRef = useRef(true)
-  // Track the last theme we synced FROM Excalidraw TO next-themes to prevent loops
-  const lastSyncedFromExcalidrawRef = useRef<string | null>(null)
   // Track the current drawing ID to detect drawing changes
   const lastDrawingIdRef = useRef<string | null>(null)
 
@@ -168,46 +161,14 @@ export default function Canvas() {
     drawingId && isAuthenticated ? { drawingId } : "skip"
   )
 
-  // Reset initialization flag when drawing changes
+  // Reset when drawing changes
   useEffect(() => {
     if (drawingId !== lastDrawingIdRef.current) {
       lastDrawingIdRef.current = drawingId
-      isInitializingRef.current = true
-      lastSyncedFromExcalidrawRef.current = null
     }
   }, [drawingId])
 
-  // Mark initialization as complete once drawing data is loaded and theme is resolved
-  useEffect(() => {
-    if (isInitializingRef.current && resolvedTheme && drawing !== undefined) {
-      // Small delay to ensure Excalidraw has initialized with correct theme
-      const timer = setTimeout(() => {
-        isInitializingRef.current = false
-      }, 150)
-      return () => clearTimeout(timer)
-    }
-  }, [drawing, resolvedTheme])
-
-  // Sync theme from Excalidraw appState to next-themes (only when user explicitly changes it)
-  const syncThemeToPage = useCallback(
-    (appState: any) => {
-      // Don't sync during initialization - only sync when user explicitly changes theme
-      if (isInitializingRef.current || !appState?.theme) {
-        return
-      }
-
-      const excalidrawTheme = appState.theme === "dark" ? "dark" : "light"
-      // Only sync if the theme actually changed and it's different from what we last synced
-      if (
-        lastSyncedFromExcalidrawRef.current !== excalidrawTheme &&
-        currentTheme !== excalidrawTheme
-      ) {
-        lastSyncedFromExcalidrawRef.current = excalidrawTheme
-        setTheme(excalidrawTheme)
-      }
-    },
-    [setTheme, currentTheme]
-  )
+  // Theme sync removed - page theme is always dark, canvas theme is independent
 
   // Debounced handler that performs the save mutation
   const { debouncedCall: handleSave, flush: flushSave } = useDebouncedCallback(
@@ -233,29 +194,19 @@ export default function Canvas() {
     }
   }, [drawingId, flushSave])
 
-  // Handler that syncs theme immediately and saves with debounce
+  // Handler that saves with debounce (theme sync removed - canvas theme is independent)
   const handleChange = (elements: readonly any[], appState: any) => {
-    // Sync theme immediately (not debounced) so UI updates right away
-    syncThemeToPage(appState)
-
     // Save with debounce, passing the current drawingId
     handleSave(elements, appState, drawingId)
   }
 
   // Compute initial data - show empty canvas immediately, inject data when available
-  // Always use next-themes theme, ignoring saved theme from drawing
+  // Use saved theme from drawing if available, otherwise default to light
   const initialData = useMemo(() => {
-    // Always use resolvedTheme or currentTheme from next-themes provider
-    const themeToUse: "light" | "dark" =
-      resolvedTheme === "dark"
-        ? "dark"
-        : resolvedTheme === "light"
-          ? "light"
-          : currentTheme === "dark"
-            ? "dark"
-            : "light"
+    // Default theme for new drawings (canvas can be light or dark independently)
+    const defaultCanvasTheme: "light" | "dark" = "light"
 
-    // If we have drawing data, use it but override theme with next-themes theme
+    // If we have drawing data, use it and preserve saved theme if it exists
     if (drawing !== undefined && drawing !== null) {
       const deserializedAppState = deserializeAppState(drawing.appState)
 
@@ -266,11 +217,15 @@ export default function Canvas() {
         delete cleanAppState.collaborators
       }
 
-      // Ensure theme is set in appState (always use next-themes theme, ignore saved theme)
+      // Ensure appState is an object
       if (!cleanAppState || typeof cleanAppState !== "object") {
         cleanAppState = {}
       }
-      cleanAppState.theme = themeToUse
+
+      // Use saved theme if it exists, otherwise use default
+      if (!cleanAppState.theme) {
+        cleanAppState.theme = defaultCanvasTheme
+      }
 
       return {
         elements: drawing.elements ?? null,
@@ -279,23 +234,30 @@ export default function Canvas() {
       }
     }
 
-    // Otherwise, show empty canvas with next-themes theme
+    // Otherwise, show empty canvas with default theme
     return {
       elements: null,
       appState: {
-        viewBackgroundColor: themeToUse === "dark" ? "#1e1e1e" : "#ffffff",
-        theme: themeToUse
+        viewBackgroundColor:
+          defaultCanvasTheme === "dark" ? "#1e1e1e" : "#ffffff",
+        theme: defaultCanvasTheme
       },
       scrollToContent: true
     }
-  }, [drawing, resolvedTheme, currentTheme])
+  }, [drawing])
 
-  // Determine effective theme for key (to force remount when theme changes)
-  // Always use next-themes theme, ignoring saved theme from drawing
+  // Determine effective theme for key (to force remount when drawing or theme changes)
+  // Use saved theme from drawing if available, otherwise default to light
   // Must be computed before early returns
   const effectiveTheme = useMemo(() => {
-    return resolvedTheme || currentTheme || "light"
-  }, [resolvedTheme, currentTheme])
+    if (drawing?.appState) {
+      const deserializedAppState = deserializeAppState(drawing.appState)
+      if (deserializedAppState?.theme) {
+        return deserializedAppState.theme
+      }
+    }
+    return "light"
+  }, [drawing])
 
   // --- Render Logic ---
 
@@ -310,11 +272,6 @@ export default function Canvas() {
     drawing !== undefined && drawing !== null
       ? `${drawingId}-loaded-${effectiveTheme}`
       : `${drawingId}-empty-${effectiveTheme}`
-
-  // Don't render Excalidraw until theme is resolved to prevent theme flickering
-  if (!resolvedTheme) {
-    return <Connecting />
-  }
 
   return (
     <div className="h-full w-full">

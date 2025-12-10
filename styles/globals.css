@@ -132,13 +132,10 @@
 
 .App-menu_top__left {
   position: relative;
-  top: 44px !important;
+  left: 46px !important;
 }
 
-.dropdown-menu-group {
-  display: none !important;
-}
-
+.dropdown-menu-group,
 .dropdown-menu-group ~ div {
   display: none !important;
 }
@@ -148,5 +145,5 @@
 }
 
 .Island.App-menu__left {
-  max-height: 660px !important;
+  left: -46px !important;
 }
