@@ -235,6 +235,7 @@ export default function Canvas() {
   >(null)
   const [fadingOutBox02, setFadingOutBox02] = useState(false)
   const [fadingOutBox01, setFadingOutBox01] = useState(false)
+  const [initialFadeInBox01, setInitialFadeInBox01] = useState(false)
 
   // Refs to track current box states without causing effect re-runs
   const drawing01Ref = useRef(drawing01)
@@ -294,6 +295,7 @@ export default function Canvas() {
       setFadingOutBox02(false)
       setBeforeAppearingBox01Fade(null)
       setBeforeAppearingBox02Fade(null)
+      setInitialFadeInBox01(false)
     }
 
     // Check if drawing01 is occupied (use refs to avoid dependency issues)
@@ -304,6 +306,7 @@ export default function Canvas() {
       // Step 1 & 2: Set state synchronously using React's automatic batching
       // Set beforeAppearingBox01Fade to true (will render with z-10, behind)
       // and set the loaded drawing to box 01
+      setInitialFadeInBox01(drawing02Ref.current === null)
       setBeforeAppearingBox01Fade(true)
       setDrawing01(newDrawingData)
 
@@ -335,10 +338,12 @@ export default function Canvas() {
         // Use setTimeout to avoid synchronous setState in effect
         setTimeout(() => {
           setBeforeAppearingBox01Fade(null)
-        }, 0)
+          setInitialFadeInBox01(false)
+        }, 500)
       }
     } else {
       // Box 01 is occupied, use box 02
+      setInitialFadeInBox01(false)
       // Step 1 & 2: Set state synchronously using React's automatic batching
       // Set beforeAppearingBox02Fade to true (will render with z-10, behind)
       // and set the loaded drawing to box 02
@@ -414,15 +419,6 @@ export default function Canvas() {
     }
     lastDrawingIdRef.current = drawingId
   }, [drawingId, flushSave])
-
-  // Handler that saves with debounce
-  const handleChange = (
-    elements: readonly OrderedExcalidrawElement[],
-    appState: AppState,
-    files: BinaryFiles
-  ) => {
-    handleSave(elements, appState, files, drawingId)
-  }
 
   // Create change handlers for each box that capture the correct drawingId
   const handleChange01 = useCallback(
@@ -608,16 +604,6 @@ export default function Canvas() {
     []
   )
 
-  // If no drawingId, show empty canvas
-  if (!drawingId) {
-    const emptyData = computeInitialData(null)
-    return (
-      <div className="h-full w-full">
-        <Excalidraw initialData={emptyData} onChange={handleChange} />
-      </div>
-    )
-  }
-
   return (
     <div className="h-full w-full relative">
       {/* drawing box 01 */}
@@ -625,11 +611,13 @@ export default function Canvas() {
         <div
           className={cn(
             "absolute top-0 left-0 h-full w-full transition-opacity duration-500",
-            beforeAppearingBox01Fade === true
-              ? "z-10 opacity-100"
-              : fadingOutBox01
-                ? "z-20 opacity-0"
-                : "z-20 opacity-100"
+            initialFadeInBox01
+              ? "z-20 opacity-0"
+              : beforeAppearingBox01Fade === true
+                ? "z-10 opacity-100"
+                : fadingOutBox01
+                  ? "z-20 opacity-0"
+                  : "z-20 opacity-100"
           )}
         >
           <Excalidraw

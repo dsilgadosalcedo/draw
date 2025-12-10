@@ -150,17 +150,48 @@ export default function Sidebar() {
     try {
       // Step 1: First redirect to another drawing if needed
       if (drawingId === currentDrawingId) {
-        if (allDrawings && allDrawings.length > 1) {
-          // Find the first drawing that's not the one being deleted
-          const otherDrawing = allDrawings.find(
-            (drawing) => drawing.drawingId !== drawingId
-          )
-          if (otherDrawing) {
-            setCurrentDrawingId(otherDrawing.drawingId)
+        const currentMetadata = allDrawings?.find(
+          (drawing) => drawing.drawingId === drawingId
+        )
+
+        if (currentMetadata?.folderId) {
+          // Prefer another drawing in the same folder
+          const sameFolder =
+            allDrawings?.filter(
+              (drawing) =>
+                drawing.folderId === currentMetadata.folderId &&
+                drawing.drawingId !== drawingId
+            ) ?? []
+
+          if (sameFolder.length > 0) {
+            setCurrentDrawingId(sameFolder[0].drawingId)
+          } else {
+            // If the folder is now empty, move to an uncategorized drawing if available
+            const otherUncategorized =
+              allDrawings?.filter(
+                (drawing) =>
+                  !drawing.folderId && drawing.drawingId !== drawingId
+              ) ?? []
+
+            if (otherUncategorized.length > 0) {
+              setCurrentDrawingId(otherUncategorized[0].drawingId)
+            } else {
+              // No drawings left anywhere, start a new uncategorized drawing
+              createNewDrawing()
+            }
           }
         } else {
-          // No other drawings, create a new one
-          createNewDrawing()
+          // Only consider uncategorized drawings to avoid auto-opening a folder drawing
+          const otherUncategorized =
+            allDrawings?.filter(
+              (drawing) => !drawing.folderId && drawing.drawingId !== drawingId
+            ) ?? []
+
+          if (otherUncategorized.length > 0) {
+            setCurrentDrawingId(otherUncategorized[0].drawingId)
+          } else {
+            createNewDrawing()
+          }
         }
       }
 

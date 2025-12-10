@@ -21,6 +21,7 @@ function DrawingWorkspace() {
 
   // Query the latest ID only once upon initial load
   const latestDrawingId = useQuery(api.drawings.getLatest)
+  const allDrawings = useQuery(api.drawings.list, {})
 
   // --- Effect to set initial drawing ID ---
   useEffect(() => {
@@ -29,21 +30,30 @@ function DrawingWorkspace() {
       !authLoading &&
       isAuthenticated &&
       latestDrawingId !== undefined &&
+      allDrawings !== undefined &&
       !currentDrawingId
     ) {
+      // If there are drawings but all are in folders, start a new uncategorized drawing
+      const hasUncategorized = allDrawings.some((d) => !d.folderId)
+
+      if (!hasUncategorized) {
+        setCurrentDrawingId(crypto.randomUUID())
+        return
+      }
+
       if (latestDrawingId) {
         // Found previous work -> Load it
         setCurrentDrawingId(latestDrawingId)
       } else {
         // No previous work -> Create new ID and set it (Canvas will auto-insert on save)
-        const newId = crypto.randomUUID()
-        setCurrentDrawingId(newId)
+        setCurrentDrawingId(crypto.randomUUID())
       }
     }
   }, [
     authLoading,
     isAuthenticated,
     latestDrawingId,
+    allDrawings,
     currentDrawingId,
     setCurrentDrawingId
   ])
