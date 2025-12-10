@@ -335,16 +335,19 @@ export const get = query({
 })
 
 export const list = query({
-  args: {},
+  args: {
+    folderId: v.optional(v.union(v.string(), v.null()))
+  },
   returns: v.array(
     v.object({
       _id: v.id("drawings"),
       _creationTime: v.number(),
       drawingId: v.string(),
-      name: v.string()
+      name: v.string(),
+      folderId: v.optional(v.string())
     })
   ),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx)
     if (userId === null) {
       return []
@@ -359,14 +362,28 @@ export const list = query({
 
     // Filter to only return active drawings (isActive !== false)
     // This includes drawings where isActive is true or undefined (backwards compatibility)
-    const activeDrawings = drawings.filter((d) => d.isActive !== false)
+    let activeDrawings = drawings.filter((d) => d.isActive !== false)
+
+    // Filter by folderId if provided
+    if (args.folderId !== undefined) {
+      if (args.folderId === null) {
+        // Return only drawings without a folder
+        activeDrawings = activeDrawings.filter((d) => !d.folderId)
+      } else {
+        // Return only drawings in the specified folder
+        activeDrawings = activeDrawings.filter(
+          (d) => d.folderId === args.folderId
+        )
+      }
+    }
 
     // Only return what we need for the list (metadata only)
     return activeDrawings.map((d) => ({
       _id: d._id,
       _creationTime: d._creationTime,
       drawingId: d.drawingId,
-      name: d.name
+      name: d.name,
+      folderId: d.folderId
     }))
   }
 })
