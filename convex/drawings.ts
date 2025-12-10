@@ -1,50 +1,50 @@
-import { v } from "convex/values";
-import { query, mutation } from "./_generated/server";
-import { getAuthUserId } from "@convex-dev/auth/server";
+import { v } from "convex/values"
+import { query, mutation } from "./_generated/server"
+import { getAuthUserId } from "@convex-dev/auth/server"
 
 export const save = mutation({
   args: {
     drawingId: v.string(),
     elements: v.any(),
-    appState: v.any(),
+    appState: v.any()
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await getAuthUserId(ctx)
     if (userId === null) {
-      throw new Error("Unauthorized");
+      throw new Error("Unauthorized")
     }
 
-    const userIdString = String(userId);
+    const userIdString = String(userId)
     const existing = await ctx.db
       .query("drawings")
       .withIndex("by_userId_and_drawingId", (q) =>
-        q.eq("userId", userIdString).eq("drawingId", args.drawingId),
+        q.eq("userId", userIdString).eq("drawingId", args.drawingId)
       )
-      .first();
+      .first()
 
     if (existing) {
       await ctx.db.patch(existing._id, {
         elements: args.elements,
-        appState: args.appState,
-      });
+        appState: args.appState
+      })
     } else {
       await ctx.db.insert("drawings", {
         userId: userIdString,
         drawingId: args.drawingId,
         name: "Draw",
         elements: args.elements,
-        appState: args.appState,
-      });
+        appState: args.appState
+      })
     }
 
-    return null;
-  },
-});
+    return null
+  }
+})
 
 export const get = query({
   args: {
-    drawingId: v.string(),
+    drawingId: v.string()
   },
   returns: v.union(
     v.object({
@@ -54,27 +54,27 @@ export const get = query({
       drawingId: v.string(),
       name: v.string(),
       elements: v.any(),
-      appState: v.any(),
+      appState: v.any()
     }),
-    v.null(),
+    v.null()
   ),
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await getAuthUserId(ctx)
     if (userId === null) {
-      return null;
+      return null
     }
 
-    const userIdString = String(userId);
+    const userIdString = String(userId)
     const drawing = await ctx.db
       .query("drawings")
       .withIndex("by_userId_and_drawingId", (q) =>
-        q.eq("userId", userIdString).eq("drawingId", args.drawingId),
+        q.eq("userId", userIdString).eq("drawingId", args.drawingId)
       )
-      .first();
+      .first()
 
-    return drawing ?? null;
-  },
-});
+    return drawing ?? null
+  }
+})
 
 export const list = query({
   args: {},
@@ -83,81 +83,110 @@ export const list = query({
       _id: v.id("drawings"),
       _creationTime: v.number(),
       drawingId: v.string(),
-      name: v.string(),
-    }),
+      name: v.string()
+    })
   ),
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await getAuthUserId(ctx)
     if (userId === null) {
-      return [];
+      return []
     }
 
-    const userIdString = String(userId);
+    const userIdString = String(userId)
     const drawings = await ctx.db
       .query("drawings")
       .withIndex("by_userId", (q) => q.eq("userId", userIdString))
       .order("desc")
-      .collect();
+      .collect()
 
     // Only return what we need for the list (metadata only)
     return drawings.map((d) => ({
       _id: d._id,
       _creationTime: d._creationTime,
       drawingId: d.drawingId,
-      name: d.name,
-    }));
-  },
-});
+      name: d.name
+    }))
+  }
+})
 
 export const getLatest = query({
   args: {},
   returns: v.union(v.string(), v.null()),
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await getAuthUserId(ctx)
     if (userId === null) {
-      return null;
+      return null
     }
 
-    const userIdString = String(userId);
+    const userIdString = String(userId)
     // Efficiently get the single most recent drawing
     const latest = await ctx.db
       .query("drawings")
       .withIndex("by_userId", (q) => q.eq("userId", userIdString))
       .order("desc") // Most recent first
-      .first();
+      .first()
 
-    return latest ? latest.drawingId : null;
-  },
-});
+    return latest ? latest.drawingId : null
+  }
+})
 
 export const updateName = mutation({
   args: {
     drawingId: v.string(),
-    name: v.string(),
+    name: v.string()
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await getAuthUserId(ctx)
     if (userId === null) {
-      throw new Error("Unauthorized");
+      throw new Error("Unauthorized")
     }
 
-    const userIdString = String(userId);
+    const userIdString = String(userId)
     const existing = await ctx.db
       .query("drawings")
       .withIndex("by_userId_and_drawingId", (q) =>
-        q.eq("userId", userIdString).eq("drawingId", args.drawingId),
+        q.eq("userId", userIdString).eq("drawingId", args.drawingId)
       )
-      .first();
+      .first()
 
     if (!existing) {
-      throw new Error("Drawing not found");
+      throw new Error("Drawing not found")
     }
 
     await ctx.db.patch(existing._id, {
-      name: args.name,
-    });
+      name: args.name
+    })
 
-    return null;
+    return null
+  }
+})
+
+export const remove = mutation({
+  args: {
+    drawingId: v.string()
   },
-});
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx)
+    if (userId === null) {
+      throw new Error("Unauthorized")
+    }
+
+    const userIdString = String(userId)
+    const existing = await ctx.db
+      .query("drawings")
+      .withIndex("by_userId_and_drawingId", (q) =>
+        q.eq("userId", userIdString).eq("drawingId", args.drawingId)
+      )
+      .first()
+
+    if (!existing) {
+      throw new Error("Drawing not found")
+    }
+
+    await ctx.db.delete(existing._id)
+
+    return null
+  }
+})

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Plus,
-  Pencil,
+  MoreVertical,
   PanelRightCloseIcon,
   LogOut,
   LineSquiggleIcon,
@@ -21,6 +21,12 @@ import { useAuthActions } from "@convex-dev/auth/react"
 import { useRouter } from "next/navigation"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog"
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from "./ui/dropdown-menu"
 
 export default function Sidebar() {
   const { currentDrawingId, setCurrentDrawingId } = useDrawing()
@@ -30,6 +36,7 @@ export default function Sidebar() {
     currentDrawingId ? { drawingId: currentDrawingId } : "skip"
   )
   const updateName = useMutation(api.drawings.updateName)
+  const removeDrawing = useMutation(api.drawings.remove)
   const [isOpen, setIsOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState("")
@@ -101,11 +108,48 @@ export default function Sidebar() {
     }
   }
 
+  const handleRemove = async (drawingId: string) => {
+    try {
+      await removeDrawing({ drawingId })
+      // If the deleted drawing is the current one, switch to another drawing
+      if (drawingId === currentDrawingId) {
+        if (drawings && drawings.length > 1) {
+          // Find the first drawing that's not the one being deleted
+          const otherDrawing = drawings.find((d) => d.drawingId !== drawingId)
+          if (otherDrawing) {
+            setCurrentDrawingId(otherDrawing.drawingId)
+          }
+        } else {
+          // No other drawings, create a new one
+          createNewDrawing()
+        }
+      }
+    } catch (error) {
+      console.error("Failed to remove drawing:", error)
+    }
+  }
+
   // Focus input when editing starts
   useEffect(() => {
     if (editingId && inputRef.current) {
-      inputRef.current.focus()
-      inputRef.current.select()
+      // Use setTimeout to ensure the dropdown has fully closed and animations are complete
+      const timeoutId = setTimeout(() => {
+        if (inputRef.current && editingId) {
+          inputRef.current.focus()
+          // Use a small delay to ensure focus is fully set before selecting
+          setTimeout(() => {
+            if (
+              inputRef.current &&
+              editingId &&
+              document.activeElement === inputRef.current
+            ) {
+              inputRef.current.select()
+            }
+          }, 10)
+        }
+      }, 150)
+
+      return () => clearTimeout(timeoutId)
     }
   }, [editingId])
 
@@ -205,10 +249,14 @@ export default function Sidebar() {
                   <div key={drawing._id} className="relative group">
                     <Input
                       ref={isEditing ? inputRef : null}
-                      onClick={() => {
+                      onClick={(e) => {
                         if (!isEditing) {
+                          e.stopPropagation()
                           setCurrentDrawingId(drawing.drawingId)
                           setIsOpen(false)
+                        } else {
+                          // When editing, prevent clicks from deselecting
+                          e.stopPropagation()
                         }
                       }}
                       value={isEditing ? editingName : drawing.name}
@@ -229,18 +277,39 @@ export default function Sidebar() {
                           : "group-hover:bg-secondary dark:group-hover:bg-secondary dark:bg-transparent cursor-pointer"
                       )}
                     />
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={(e) =>
-                        startEditing(drawing.drawingId, drawing.name, e)
-                      }
-                      title="Edit name"
-                      aria-label="Edit drawing name"
-                      className="absolute top-1/2 hover:bg-transparent -translate-y-1/2 right-0 hidden group-hover:inline-flex"
-                    >
-                      <Pencil />
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={(e) => e.stopPropagation()}
+                          title="More options"
+                          aria-label="Drawing options"
+                          className="absolute top-1/2 dark:hover:bg-transparent hover:bg-transparent -translate-y-1/2 right-0 opacity-0 group-hover:opacity-100"
+                        >
+                          <MoreVertical />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            startEditing(drawing.drawingId, drawing.name, e)
+                          }}
+                        >
+                          Rename
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleRemove(drawing.drawingId)
+                          }}
+                        >
+                          Remove
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 )
               })
