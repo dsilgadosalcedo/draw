@@ -255,7 +255,7 @@ export function DrawingList({
                       onLeave(drawing.drawingId)
                     }}
                   >
-                    <sidebarIcons.LogOut className="h-4 w-4" />
+                    <sidebarIcons.LogOut />
                     Leave collaboration
                   </DropdownMenuItem>
                 )}

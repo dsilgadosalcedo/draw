@@ -3,16 +3,6 @@
 import { useMutation, useQuery } from "convex/react"
 import { useCallback, useMemo, useState } from "react"
 
-import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useAuthActions } from "@convex-dev/auth/react"
 import { useRouter } from "next/navigation"
@@ -26,6 +16,7 @@ import { FolderSection } from "./sidebar/components/folder-section"
 import { DrawingList } from "./sidebar/components/drawing-list"
 import { SearchDialog } from "./sidebar/components/search-dialog"
 import { NewFolderDialog } from "./sidebar/components/new-folder-dialog"
+import { ShareDialog } from "./sidebar/components/share-dialog"
 import { useSidebarState } from "./sidebar/hooks/use-sidebar-state"
 import { useDrawingActions } from "./sidebar/hooks/use-drawing-actions"
 import { useFolderActions } from "./sidebar/hooks/use-folder-actions"
@@ -48,6 +39,7 @@ export default function Sidebar() {
   const updateName = useMutation(api.drawings.updateName)
   const removeDrawing = useMutation(api.drawings.remove)
   const addCollaborator = useMutation(api.drawings.addCollaboratorByEmail)
+  const removeCollaborator = useMutation(api.drawings.removeCollaborator)
   const leaveCollaboration = useMutation(api.drawings.leaveCollaboration)
   const createFolder = useMutation(api.folders.create)
   const updateFolderName = useMutation(api.folders.updateName)
@@ -63,6 +55,15 @@ export default function Sidebar() {
   const [shareEmail, setShareEmail] = useState("")
   const [shareError, setShareError] = useState<string | null>(null)
   const [shareLoading, setShareLoading] = useState(false)
+  const [removingIds, setRemovingIds] = useState<Set<string>>(new Set())
+  const shareCollaborators = useQuery(
+    api.drawings.listCollaborators,
+    shareDialogOpen && shareTargetDrawingId
+      ? { drawingId: shareTargetDrawingId }
+      : "skip"
+  ) as
+    | { collaboratorUserId: string; email?: string; name?: string }[]
+    | undefined
   const shareTargetName = useMemo(() => {
     if (!shareTargetDrawingId || !allDrawings) return null
     return (
@@ -193,6 +194,29 @@ export default function Sidebar() {
       setShareLoading(false)
     }
   }, [addCollaborator, getShareFriendlyError, shareEmail, shareTargetDrawingId])
+
+  const handleRemoveCollaborator = useCallback(
+    async (collaboratorUserId: string) => {
+      if (!shareTargetDrawingId) return
+      setRemovingIds((prev) => new Set(prev).add(collaboratorUserId))
+      setShareError(null)
+      try {
+        await removeCollaborator({
+          drawingId: shareTargetDrawingId,
+          collaboratorUserId
+        })
+      } catch (error) {
+        setShareError(getShareFriendlyError(error))
+      } finally {
+        setRemovingIds((prev) => {
+          const next = new Set(prev)
+          next.delete(collaboratorUserId)
+          return next
+        })
+      }
+    },
+    [getShareFriendlyError, removeCollaborator, shareTargetDrawingId]
+  )
 
   const folderHandlers = useFolderActions({
     folders,
@@ -363,8 +387,14 @@ export default function Sidebar() {
         inputRef={refs.newFolderDialogInputRef}
       />
 
-      <Dialog
+      <ShareDialog
         open={shareDialogOpen}
+        targetName={shareTargetName}
+        email={shareEmail}
+        error={shareError}
+        loading={shareLoading}
+        removingIds={removingIds}
+        collaborators={shareCollaborators}
         onOpenChange={(open) => {
           setShareDialogOpen(open)
           if (!open) {
@@ -372,42 +402,10 @@ export default function Sidebar() {
             setShareError(null)
           }
         }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Share drawing</DialogTitle>
-            <DialogDescription>
-              {shareTargetName
-                ? `Add a collaborator to "${shareTargetName}".`
-                : "Add a collaborator by email."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <Input
-              type="email"
-              value={shareEmail}
-              onChange={(e) => setShareEmail(e.target.value)}
-              placeholder="username"
-              autoFocus
-            />
-            {shareError && (
-              <p className="text-sm text-destructive">{shareError}</p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              onClick={handleShareSubmit}
-              disabled={
-                shareLoading ||
-                !shareTargetDrawingId ||
-                shareEmail.trim().length === 0
-              }
-            >
-              {shareLoading ? "Adding..." : "Add collaborator"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onEmailChange={setShareEmail}
+        onSubmit={handleShareSubmit}
+        onRemove={handleRemoveCollaborator}
+      />
     </>
   )
 }

@@ -499,6 +499,55 @@ export const listShared = query({
   }
 })
 
+export const listCollaborators = query({
+  args: {
+    drawingId: v.string()
+  },
+  returns: v.array(
+    v.object({
+      collaboratorUserId: v.string(),
+      email: v.optional(v.string()),
+      name: v.optional(v.string()),
+      addedByUserId: v.string()
+    })
+  ),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx)
+    if (userId === null) {
+      return []
+    }
+
+    const userIdString = String(userId)
+    const { drawing, role } = await loadDrawingAndRole(
+      ctx,
+      args.drawingId,
+      userIdString
+    )
+
+    if (!drawing || drawing.isActive === false || role !== "owner") {
+      return []
+    }
+
+    const collaborators = await ctx.db
+      .query("drawingCollaborators")
+      .withIndex("by_drawingId", (q) => q.eq("drawingId", args.drawingId))
+      .collect()
+
+    const results = []
+    for (const entry of collaborators) {
+      const userDoc = await ctx.db.get(entry.collaboratorUserId as any)
+      results.push({
+        collaboratorUserId: entry.collaboratorUserId,
+        email: (userDoc as any)?.email,
+        name: (userDoc as any)?.name,
+        addedByUserId: entry.addedByUserId
+      })
+    }
+
+    return results
+  }
+})
+
 export const getLatest = query({
   args: {},
   returns: v.union(v.string(), v.null()),
@@ -581,6 +630,55 @@ export const addCollaboratorByEmail = mutation({
       addedByUserId: userIdString
     })
 
+    return null
+  }
+})
+
+export const removeCollaborator = mutation({
+  args: {
+    drawingId: v.string(),
+    collaboratorUserId: v.string()
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx)
+    if (userId === null) {
+      throw new Error("Unauthorized")
+    }
+
+    const userIdString = String(userId)
+    const { drawing, role } = await loadDrawingAndRole(
+      ctx,
+      args.drawingId,
+      userIdString
+    )
+
+    if (!drawing || drawing.isActive === false) {
+      throw new Error("Drawing not found")
+    }
+
+    if (role !== "owner") {
+      throw new Error("Only the owner can remove collaborators")
+    }
+
+    if (args.collaboratorUserId === userIdString) {
+      throw new Error("Owner cannot remove themselves")
+    }
+
+    const existing = await ctx.db
+      .query("drawingCollaborators")
+      .withIndex("by_collaborator_and_drawingId", (q: any) =>
+        q
+          .eq("collaboratorUserId", args.collaboratorUserId)
+          .eq("drawingId", args.drawingId)
+      )
+      .first()
+
+    if (!existing) {
+      return null
+    }
+
+    await ctx.db.delete(existing._id)
     return null
   }
 })
