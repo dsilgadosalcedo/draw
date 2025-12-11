@@ -120,5 +120,6 @@ export const sidebarIcons = {
   FolderPlus,
   ChevronDown,
   Palette,
-  Folder
+  Folder,
+  UserRound
 }

@@ -1,8 +1,18 @@
 "use client"
 
 import { useMutation, useQuery } from "convex/react"
-import { useCallback } from "react"
+import { useCallback, useMemo, useState } from "react"
 
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useAuthActions } from "@convex-dev/auth/react"
 import { useRouter } from "next/navigation"
@@ -26,6 +36,9 @@ export default function Sidebar() {
   const allDrawings = useQuery(api.drawings.list, {}) as
     | SidebarDrawing[]
     | undefined
+  const sharedDrawings = useQuery(api.drawings.listShared) as
+    | SidebarDrawing[]
+    | undefined
   const folders = useQuery(api.folders.list) as SidebarFolder[] | undefined
   const currentDrawing = useQuery(
     api.drawings.get,
@@ -34,6 +47,8 @@ export default function Sidebar() {
   const userStorage = useQuery(api.drawings.getUserStorage)
   const updateName = useMutation(api.drawings.updateName)
   const removeDrawing = useMutation(api.drawings.remove)
+  const addCollaborator = useMutation(api.drawings.addCollaboratorByEmail)
+  const leaveCollaboration = useMutation(api.drawings.leaveCollaboration)
   const createFolder = useMutation(api.folders.create)
   const updateFolderName = useMutation(api.folders.updateName)
   const updateFolderAppearance = useMutation(api.folders.updateAppearance)
@@ -41,6 +56,20 @@ export default function Sidebar() {
   const moveDrawingToFolder = useMutation(api.folders.moveDrawingToFolder)
   const { signOut } = useAuthActions()
   const router = useRouter()
+  const [shareDialogOpen, setShareDialogOpen] = useState(false)
+  const [shareTargetDrawingId, setShareTargetDrawingId] = useState<
+    string | null
+  >(null)
+  const [shareEmail, setShareEmail] = useState("")
+  const [shareError, setShareError] = useState<string | null>(null)
+  const [shareLoading, setShareLoading] = useState(false)
+  const shareTargetName = useMemo(() => {
+    if (!shareTargetDrawingId || !allDrawings) return null
+    return (
+      allDrawings.find((d) => d.drawingId === shareTargetDrawingId)?.name ??
+      null
+    )
+  }, [allDrawings, shareTargetDrawingId])
 
   const {
     isOpen,
@@ -76,6 +105,43 @@ export default function Sidebar() {
     filteredDrawings
   } = useSidebarState(allDrawings)
 
+  const sharedDrawingsWithFlag = useMemo(
+    () =>
+      (sharedDrawings ?? []).map((drawing) => ({
+        ...drawing,
+        isShared: true
+      })),
+    [sharedDrawings]
+  )
+
+  const getShareFriendlyError = useCallback((error: unknown): string => {
+    const raw =
+      error instanceof Error
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : "Failed to add collaborator"
+
+    const normalized = raw.toLowerCase()
+    if (normalized.includes("user not found")) {
+      return "No user with that email was found."
+    }
+    if (normalized.includes("already a collaborator")) {
+      return "That user is already a collaborator."
+    }
+    if (normalized.includes("only the owner")) {
+      return "Only the owner can share this drawing."
+    }
+    if (normalized.includes("share with yourself")) {
+      return "You already own this drawing."
+    }
+    if (normalized.includes("unauthorized")) {
+      return "You need permission to share this drawing."
+    }
+
+    return "Could not add collaborator. Please try again."
+  }, [])
+
   const createNewDrawing = useCallback(() => {
     const newId = crypto.randomUUID()
     setCurrentDrawingId(newId)
@@ -96,6 +162,38 @@ export default function Sidebar() {
     setEditingId
   })
 
+  const handleOpenShareDialog = useCallback((drawingId: string) => {
+    setShareTargetDrawingId(drawingId)
+    setShareDialogOpen(true)
+    setShareEmail("")
+    setShareError(null)
+  }, [])
+
+  const handleShareSubmit = useCallback(async () => {
+    if (!shareTargetDrawingId) return
+    if (!shareEmail.trim()) {
+      setShareError("Please enter an email.")
+      return
+    }
+
+    setShareLoading(true)
+    setShareError(null)
+
+    try {
+      await addCollaborator({
+        drawingId: shareTargetDrawingId,
+        email: shareEmail.trim()
+      })
+      setShareDialogOpen(false)
+      setShareTargetDrawingId(null)
+      setShareEmail("")
+    } catch (error) {
+      setShareError(getShareFriendlyError(error))
+    } finally {
+      setShareLoading(false)
+    }
+  }, [addCollaborator, getShareFriendlyError, shareEmail, shareTargetDrawingId])
+
   const folderHandlers = useFolderActions({
     folders,
     createFolder,
@@ -115,6 +213,38 @@ export default function Sidebar() {
     setNewFolderDialogName,
     setNewFolderDialogOpen
   })
+
+  const handleLeaveCollaboration = useCallback(
+    async (drawingId: string) => {
+      try {
+        await leaveCollaboration({ drawingId })
+        if (currentDrawingId === drawingId) {
+          const nextOwned = allDrawings?.find(
+            (drawing) => drawing.drawingId !== drawingId
+          )
+          const nextShared = sharedDrawingsWithFlag.find(
+            (drawing) => drawing.drawingId !== drawingId
+          )
+          const nextId = nextOwned?.drawingId ?? nextShared?.drawingId ?? null
+          if (nextId) {
+            setCurrentDrawingId(nextId)
+          } else {
+            createNewDrawing()
+          }
+        }
+      } catch (error) {
+        console.error("Failed to leave collaboration:", error)
+      }
+    },
+    [
+      allDrawings,
+      createNewDrawing,
+      currentDrawingId,
+      leaveCollaboration,
+      setCurrentDrawingId,
+      sharedDrawingsWithFlag
+    ]
+  )
 
   const handleSignOut = useCallback(async () => {
     try {
@@ -167,11 +297,33 @@ export default function Sidebar() {
           currentDrawingId={currentDrawingId}
         />
 
-        <span className="text-sm text-muted-foreground px-4 py-1 mt-2">
-          Your drawings
-        </span>
-
         <ScrollArea className="flex-1 space-y-1 px-1">
+          {sharedDrawingsWithFlag.length > 0 && (
+            <>
+              <span className="text-sm text-muted-foreground px-3 py-1 block">
+                Shared drawings
+              </span>
+              <DrawingList
+                variant="shared"
+                drawings={sharedDrawingsWithFlag}
+                folders={folders}
+                editingId={null}
+                editingName=""
+                inputRef={refs.inputRef}
+                currentDrawingId={currentDrawingId}
+                drawingHandlers={drawingActions}
+                onOpenNewFolderDialog={() => {}}
+                onLeave={handleLeaveCollaboration}
+                emptyLabel="No shared drawings yet"
+              />
+              <div className="h-2" />
+            </>
+          )}
+
+          <span className="text-sm text-muted-foreground px-3 py-1 block">
+            Your drawings
+          </span>
+
           <DrawingList
             drawings={groupedDrawings.uncategorizedDrawings}
             folders={folders}
@@ -181,6 +333,8 @@ export default function Sidebar() {
             currentDrawingId={currentDrawingId}
             drawingHandlers={drawingActions}
             onOpenNewFolderDialog={folderHandlers.handleOpenNewFolderDialog}
+            variant="owned"
+            onShare={handleOpenShareDialog}
           />
         </ScrollArea>
 
@@ -208,6 +362,52 @@ export default function Sidebar() {
         onKeyDown={folderHandlers.handleNewFolderDialogKeyDown}
         inputRef={refs.newFolderDialogInputRef}
       />
+
+      <Dialog
+        open={shareDialogOpen}
+        onOpenChange={(open) => {
+          setShareDialogOpen(open)
+          if (!open) {
+            setShareTargetDrawingId(null)
+            setShareError(null)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Share drawing</DialogTitle>
+            <DialogDescription>
+              {shareTargetName
+                ? `Add a collaborator to "${shareTargetName}".`
+                : "Add a collaborator by email."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              type="email"
+              value={shareEmail}
+              onChange={(e) => setShareEmail(e.target.value)}
+              placeholder="username"
+              autoFocus
+            />
+            {shareError && (
+              <p className="text-sm text-destructive">{shareError}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={handleShareSubmit}
+              disabled={
+                shareLoading ||
+                !shareTargetDrawingId ||
+                shareEmail.trim().length === 0
+              }
+            >
+              {shareLoading ? "Adding..." : "Add collaborator"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

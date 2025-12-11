@@ -47,6 +47,10 @@ type DrawingListProps = {
   currentDrawingId: string | null
   drawingHandlers: DrawingHandlers
   onOpenNewFolderDialog: (drawingId: string) => void
+  variant?: "owned" | "shared"
+  onShare?: (drawingId: string) => void
+  onLeave?: (drawingId: string) => void
+  emptyLabel?: string
 }
 
 export function DrawingList({
@@ -57,8 +61,13 @@ export function DrawingList({
   inputRef,
   currentDrawingId,
   drawingHandlers,
-  onOpenNewFolderDialog
+  onOpenNewFolderDialog,
+  variant = "owned",
+  onShare,
+  onLeave,
+  emptyLabel
 }: DrawingListProps) {
+  const isSharedVariant = variant === "shared"
   const [openMenuDrawingId, setOpenMenuDrawingId] = useState<string | null>(
     null
   )
@@ -66,7 +75,7 @@ export function DrawingList({
   if (!drawings || drawings.length === 0) {
     return (
       <div className="text-center text-sm text-gray-400 dark:text-slate-500 px-4">
-        No drawings yet
+        {emptyLabel ?? "No drawings yet"}
       </div>
     )
   }
@@ -91,17 +100,33 @@ export function DrawingList({
                 }
               }}
               value={isEditing ? editingName : drawing.name}
-              readOnly={!isEditing}
-              onChange={(e) =>
-                drawingHandlers.startEditing(drawing.drawingId, e.target.value)
+              readOnly={isSharedVariant || !isEditing}
+              onChange={
+                isSharedVariant
+                  ? undefined
+                  : (e) =>
+                      drawingHandlers.startEditing(
+                        drawing.drawingId,
+                        e.target.value
+                      )
               }
-              onBlur={() => {
-                if (isEditing) {
-                  void drawingHandlers.saveName(drawing.drawingId)
-                }
-              }}
-              onKeyDown={(e) =>
-                drawingHandlers.handleNameInputKeyDown(e, drawing.drawingId)
+              onBlur={
+                isSharedVariant
+                  ? undefined
+                  : () => {
+                      if (isEditing) {
+                        void drawingHandlers.saveName(drawing.drawingId)
+                      }
+                    }
+              }
+              onKeyDown={
+                isSharedVariant
+                  ? undefined
+                  : (e) =>
+                      drawingHandlers.handleNameInputKeyDown(
+                        e,
+                        drawing.drawingId
+                      )
               }
               className={cn(
                 "border-none shadow-none focus-visible:border-none focus-visible:ring-0",
@@ -145,65 +170,95 @@ export function DrawingList({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    drawingHandlers.startEditing(
-                      drawing.drawingId,
-                      drawing.name
-                    )
-                  }}
-                >
-                  <sidebarIcons.Pencil className="h-4 w-4" />
-                  Rename
-                </DropdownMenuItem>
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
-                    <sidebarIcons.Folder className="h-4 w-4" />
-                    Move to folder
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent>
+                {variant === "owned" && onShare && (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onShare(drawing.drawingId)
+                    }}
+                  >
+                    <sidebarIcons.UserRound className="h-4 w-4" />
+                    Share
+                  </DropdownMenuItem>
+                )}
+
+                {variant === "owned" && (
+                  <>
+                    {onShare && <DropdownMenuSeparator />}
                     <DropdownMenuItem
                       onClick={(e) => {
                         e.stopPropagation()
-                        onOpenNewFolderDialog(drawing.drawingId)
+                        drawingHandlers.startEditing(
+                          drawing.drawingId,
+                          drawing.name
+                        )
                       }}
                     >
-                      <sidebarIcons.Plus className="h-4 w-4" />
-                      New folder
+                      <sidebarIcons.Pencil className="h-4 w-4" />
+                      Rename
                     </DropdownMenuItem>
-                    {folders && folders.length > 0 && (
-                      <>
-                        <DropdownMenuSeparator />
-                        {folders.map((folder) => (
-                          <DropdownMenuItem
-                            key={folder.folderId}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              void drawingHandlers.handleMoveDrawingToFolder(
-                                drawing.drawingId,
-                                folder.folderId
-                              )
-                            }}
-                          >
-                            <sidebarIcons.Folder className="h-4 w-4" />
-                            {folder.name}
-                          </DropdownMenuItem>
-                        ))}
-                      </>
-                    )}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-                <DropdownMenuItem
-                  variant="destructive"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    void drawingHandlers.handleRemove(drawing.drawingId)
-                  }}
-                >
-                  <sidebarIcons.Trash2 className="h-4 w-4" />
-                  Remove
-                </DropdownMenuItem>
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>
+                        <sidebarIcons.Folder className="h-4 w-4" />
+                        Move to folder
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent>
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onOpenNewFolderDialog(drawing.drawingId)
+                          }}
+                        >
+                          <sidebarIcons.Plus className="h-4 w-4" />
+                          New folder
+                        </DropdownMenuItem>
+                        {folders && folders.length > 0 && (
+                          <>
+                            <DropdownMenuSeparator />
+                            {folders.map((folder) => (
+                              <DropdownMenuItem
+                                key={folder.folderId}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  void drawingHandlers.handleMoveDrawingToFolder(
+                                    drawing.drawingId,
+                                    folder.folderId
+                                  )
+                                }}
+                              >
+                                <sidebarIcons.Folder className="h-4 w-4" />
+                                {folder.name}
+                              </DropdownMenuItem>
+                            ))}
+                          </>
+                        )}
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void drawingHandlers.handleRemove(drawing.drawingId)
+                      }}
+                    >
+                      <sidebarIcons.Trash2 className="h-4 w-4" />
+                      Remove
+                    </DropdownMenuItem>
+                  </>
+                )}
+
+                {variant === "shared" && onLeave && (
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onLeave(drawing.drawingId)
+                    }}
+                  >
+                    <sidebarIcons.LogOut className="h-4 w-4" />
+                    Leave collaboration
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

@@ -20,6 +20,7 @@ export default defineSchema({
   })
     .index("by_userId", ["userId"])
     .index("by_userId_and_drawingId", ["userId", "drawingId"])
+    .index("by_drawingId", ["drawingId"])
     .index("by_folderId", ["folderId"]),
 
   folders: defineTable({
@@ -36,5 +37,14 @@ export default defineSchema({
   userStorage: defineTable({
     userId: v.string(),
     totalBytes: v.number()
-  }).index("by_userId", ["userId"])
+  }).index("by_userId", ["userId"]),
+
+  drawingCollaborators: defineTable({
+    drawingId: v.string(),
+    collaboratorUserId: v.string(),
+    addedByUserId: v.string()
+  })
+    .index("by_collaboratorUserId", ["collaboratorUserId"])
+    .index("by_drawingId", ["drawingId"])
+    .index("by_collaborator_and_drawingId", ["collaboratorUserId", "drawingId"])
 })

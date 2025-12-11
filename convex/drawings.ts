@@ -116,6 +116,44 @@ async function getFileUrls(
   return files
 }
 
+type DrawingAccessRole = "owner" | "collaborator" | null
+
+async function loadDrawingAndRole(
+  ctx: any,
+  drawingId: string,
+  userId: string
+): Promise<{ drawing: any | null; role: DrawingAccessRole }> {
+  const drawing = await ctx.db
+    .query("drawings")
+    .withIndex("by_drawingId", (q: any) => q.eq("drawingId", drawingId))
+    .first()
+
+  if (!drawing || drawing.isActive === false) {
+    return { drawing: drawing ?? null, role: null }
+  }
+
+  if (drawing.userId === userId) {
+    return { drawing, role: "owner" }
+  }
+
+  const collaborator = await ctx.db
+    .query("drawingCollaborators")
+    .withIndex("by_collaborator_and_drawingId", (q: any) =>
+      q.eq("collaboratorUserId", userId).eq("drawingId", drawingId)
+    )
+    .first()
+
+  if (collaborator) {
+    return { drawing, role: "collaborator" }
+  }
+
+  return { drawing, role: null }
+}
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase()
+}
+
 // Internal mutation to update user storage
 export const updateUserStorageInternal = internalMutation({
   args: {
@@ -144,12 +182,19 @@ export const save = mutation({
     }
 
     const userIdString = String(userId)
-    const existing = await ctx.db
-      .query("drawings")
-      .withIndex("by_userId_and_drawingId", (q) =>
-        q.eq("userId", userIdString).eq("drawingId", args.drawingId)
-      )
-      .first()
+    const { drawing: existing, role } = await loadDrawingAndRole(
+      ctx,
+      args.drawingId,
+      userIdString
+    )
+
+    if (existing && existing.isActive === false) {
+      throw new Error("Drawing not found")
+    }
+
+    if (existing && role === null) {
+      throw new Error("Unauthorized")
+    }
 
     if (existing) {
       await ctx.db.patch(existing._id, {
@@ -189,14 +234,20 @@ export const saveWithFiles = action({
 
     const userIdString = String(userId)
 
-    const existing = await ctx.runQuery(internal.drawings.getDrawingWithFiles, {
+    const access = await ctx.runQuery(internal.drawings.getDrawingWithFiles, {
       drawingId: args.drawingId,
       userId: userIdString
     })
 
-    if (existing && existing.isActive === false) {
+    if (access.status === "forbidden") {
+      throw new Error("Unauthorized")
+    }
+
+    if (access.status === "inactive") {
       throw new Error("Drawing not found")
     }
+
+    const existing = access.drawing ?? null
 
     let newFileMap: Record<string, Id<"_storage">> | undefined = undefined
     let bytesDelta = 0
@@ -307,14 +358,13 @@ export const get = query({
     }
 
     const userIdString = String(userId)
-    const drawing = await ctx.db
-      .query("drawings")
-      .withIndex("by_userId_and_drawingId", (q) =>
-        q.eq("userId", userIdString).eq("drawingId", args.drawingId)
-      )
-      .first()
+    const { drawing, role } = await loadDrawingAndRole(
+      ctx,
+      args.drawingId,
+      userIdString
+    )
 
-    if (!drawing || drawing.isActive === false) {
+    if (!drawing || drawing.isActive === false || role === null) {
       return null
     }
 
@@ -388,6 +438,67 @@ export const list = query({
   }
 })
 
+export const listShared = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      _id: v.id("drawings"),
+      _creationTime: v.number(),
+      drawingId: v.string(),
+      name: v.string(),
+      folderId: v.optional(v.string())
+    })
+  ),
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx)
+    if (userId === null) {
+      return []
+    }
+
+    const userIdString = String(userId)
+    const collaboratorEntries = await ctx.db
+      .query("drawingCollaborators")
+      .withIndex("by_collaboratorUserId", (q) =>
+        q.eq("collaboratorUserId", userIdString)
+      )
+      .collect()
+
+    if (collaboratorEntries.length === 0) {
+      return []
+    }
+
+    const sharedDrawings: Array<{
+      _id: Id<"drawings">
+      _creationTime: number
+      drawingId: string
+      name: string
+      folderId?: string
+    }> = []
+
+    for (const entry of collaboratorEntries) {
+      const drawing = await ctx.db
+        .query("drawings")
+        .withIndex("by_drawingId", (q) => q.eq("drawingId", entry.drawingId))
+        .first()
+
+      if (!drawing || drawing.isActive === false) {
+        continue
+      }
+
+      sharedDrawings.push({
+        _id: drawing._id,
+        _creationTime: drawing._creationTime,
+        drawingId: drawing.drawingId,
+        name: drawing.name,
+        folderId: drawing.folderId ?? undefined
+      })
+    }
+
+    // Newest first for consistency with owned drawings
+    return sharedDrawings.sort((a, b) => b._creationTime - a._creationTime)
+  }
+})
+
 export const getLatest = query({
   args: {},
   returns: v.union(v.string(), v.null()),
@@ -406,6 +517,100 @@ export const getLatest = query({
       .first()
 
     return latest ? latest.drawingId : null
+  }
+})
+
+export const addCollaboratorByEmail = mutation({
+  args: {
+    drawingId: v.string(),
+    email: v.string()
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx)
+    if (userId === null) {
+      throw new Error("Unauthorized")
+    }
+
+    const userIdString = String(userId)
+    const normalizedEmail = normalizeEmail(args.email)
+
+    const { drawing, role } = await loadDrawingAndRole(
+      ctx,
+      args.drawingId,
+      userIdString
+    )
+
+    if (!drawing || drawing.isActive === false) {
+      throw new Error("Drawing not found")
+    }
+
+    if (role !== "owner") {
+      throw new Error("Only the owner can share this drawing")
+    }
+
+    const targetUser = await ctx.db
+      .query("users")
+      .withIndex("email", (q: any) => q.eq("email", normalizedEmail))
+      .first()
+
+    if (!targetUser) {
+      throw new Error("User not found")
+    }
+
+    const targetUserId = String(targetUser._id)
+
+    if (targetUserId === userIdString) {
+      throw new Error("You cannot share with yourself")
+    }
+
+    const existingCollaborator = await ctx.db
+      .query("drawingCollaborators")
+      .withIndex("by_collaborator_and_drawingId", (q: any) =>
+        q.eq("collaboratorUserId", targetUserId).eq("drawingId", args.drawingId)
+      )
+      .first()
+
+    if (existingCollaborator) {
+      throw new Error("User is already a collaborator")
+    }
+
+    await ctx.db.insert("drawingCollaborators", {
+      drawingId: args.drawingId,
+      collaboratorUserId: targetUserId,
+      addedByUserId: userIdString
+    })
+
+    return null
+  }
+})
+
+export const leaveCollaboration = mutation({
+  args: {
+    drawingId: v.string()
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx)
+    if (userId === null) {
+      throw new Error("Unauthorized")
+    }
+
+    const userIdString = String(userId)
+
+    const existing = await ctx.db
+      .query("drawingCollaborators")
+      .withIndex("by_collaborator_and_drawingId", (q) =>
+        q.eq("collaboratorUserId", userIdString).eq("drawingId", args.drawingId)
+      )
+      .first()
+
+    if (!existing) {
+      return null
+    }
+
+    await ctx.db.delete(existing._id)
+    return null
   }
 })
 
@@ -511,30 +716,84 @@ export const getDrawingWithFiles = internalQuery({
     drawingId: v.string(),
     userId: v.string()
   },
-  returns: v.union(
-    v.object({
-      _id: v.id("drawings"),
-      files: v.optional(v.record(v.string(), v.id("_storage"))),
-      isActive: v.optional(v.boolean())
-    }),
-    v.null()
-  ),
+  returns: v.object({
+    status: v.union(
+      v.literal("not_found"),
+      v.literal("inactive"),
+      v.literal("forbidden"),
+      v.literal("owner"),
+      v.literal("collaborator")
+    ),
+    drawing: v.optional(
+      v.object({
+        _id: v.id("drawings"),
+        userId: v.string(),
+        files: v.optional(v.record(v.string(), v.id("_storage"))),
+        isActive: v.optional(v.boolean())
+      })
+    )
+  }),
   handler: async (ctx, args) => {
     const drawing = await ctx.db
       .query("drawings")
-      .withIndex("by_userId_and_drawingId", (q) =>
-        q.eq("userId", args.userId).eq("drawingId", args.drawingId)
-      )
+      .withIndex("by_drawingId", (q) => q.eq("drawingId", args.drawingId))
       .first()
 
     if (!drawing) {
-      return null
+      return { status: "not_found" as const, drawing: undefined }
+    }
+
+    if (drawing.isActive === false) {
+      return {
+        status: "inactive" as const,
+        drawing: {
+          _id: drawing._id,
+          userId: drawing.userId,
+          files: drawing.files,
+          isActive: drawing.isActive
+        }
+      }
+    }
+
+    if (drawing.userId === args.userId) {
+      return {
+        status: "owner" as const,
+        drawing: {
+          _id: drawing._id,
+          userId: drawing.userId,
+          files: drawing.files,
+          isActive: drawing.isActive
+        }
+      }
+    }
+
+    const collaborator = await ctx.db
+      .query("drawingCollaborators")
+      .withIndex("by_collaborator_and_drawingId", (q) =>
+        q.eq("collaboratorUserId", args.userId).eq("drawingId", args.drawingId)
+      )
+      .first()
+
+    if (collaborator) {
+      return {
+        status: "collaborator" as const,
+        drawing: {
+          _id: drawing._id,
+          userId: drawing.userId,
+          files: drawing.files,
+          isActive: drawing.isActive
+        }
+      }
     }
 
     return {
-      _id: drawing._id,
-      files: drawing.files,
-      isActive: drawing.isActive
+      status: "forbidden" as const,
+      drawing: {
+        _id: drawing._id,
+        userId: drawing.userId,
+        files: drawing.files,
+        isActive: drawing.isActive
+      }
     }
   }
 })
@@ -596,15 +855,17 @@ export const deleteDrawingFilesInternal = internalAction({
   returns: v.null(),
   handler: async (ctx, args) => {
     // Get the drawing with files
-    const drawing: {
-      _id: Id<"drawings">
-      files: Record<string, Id<"_storage">> | undefined
-    } | null = await ctx.runQuery(internal.drawings.getDrawingWithFiles, {
+    const access = await ctx.runQuery(internal.drawings.getDrawingWithFiles, {
       drawingId: args.drawingId,
       userId: args.userId
     })
 
-    if (!drawing || !drawing.files || Object.keys(drawing.files).length === 0) {
+    if (
+      !access.drawing ||
+      access.status === "inactive" ||
+      !access.drawing.files ||
+      Object.keys(access.drawing.files).length === 0
+    ) {
       // No files to delete, just complete the deletion
       await ctx.runMutation(internal.drawings.completeDrawingDeletion, {
         drawingId: args.drawingId,
@@ -614,10 +875,14 @@ export const deleteDrawingFilesInternal = internalAction({
       return null
     }
 
+    if (access.status === "forbidden") {
+      return null
+    }
+
     let totalBytesDeleted = 0
 
     // Delete each file from storage (one per file/chunk)
-    for (const storageId of Object.values(drawing.files)) {
+    for (const storageId of Object.values(access.drawing.files)) {
       try {
         // Get file size before deleting
         const fileSize: number = await ctx.runQuery(

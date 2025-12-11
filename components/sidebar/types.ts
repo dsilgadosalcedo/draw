@@ -12,6 +12,7 @@ export type SidebarDrawing = {
   drawingId: string
   name: string
   folderId?: string | null
+  isShared?: boolean
 }
 
 export type SidebarFolder = {
@@ -37,4 +38,3 @@ export type FolderIconComponent = ComponentType<{
 }>
 
 export type FolderIconMap = Record<FolderIconKey, FolderIconComponent>
-
