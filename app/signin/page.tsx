@@ -3,10 +3,13 @@
 import { useAuthActions } from "@convex-dev/auth/react"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
-import Image from "next/image"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { LineSquiggleIcon } from "lucide-react"
+// import { LineSquiggleIcon } from "lucide-react"
+import { H1, Muted } from "@/components/ui/typography"
+import Figures from "@/components/figures"
+import { Loader2Icon } from "lucide-react"
 
 function getUserFriendlyError(
   error: unknown,
@@ -103,7 +106,7 @@ export default function SignIn() {
   return (
     <div className="relative w-full h-screen overflow-hidden">
       {/* Background image with format fallback */}
-      <picture className="absolute inset-0 w-full h-full">
+      {/* <picture className="absolute inset-0 w-full h-full">
         <source srcSet="/golden-ratio.avif" type="image/avif" />
         <img
           src="/golden-ratio.jpg"
@@ -111,13 +114,15 @@ export default function SignIn() {
           className="w-full h-full object-cover dark:opacity-20"
           aria-hidden="true"
         />
-      </picture>
-
+      </picture> */}
+      <Figures />
       {/* Content */}
       <div className="relative grid place-items-center z-10 w-full max-w-lg mx-auto h-full justify-center items-center px-4">
-        <div className="backdrop-blur-sm flex flex-col max-w-100 min-w-100 gap-8 p-8 rounded-4xl bg-background/30 shadow-2xl">
-          <div className="text-center flex flex-col items-center gap-4">
-            <LineSquiggleIcon width={90} height={90} />
+        <div className="backdrop-blur-sm flex flex-col max-w-100 min-w-100 gap-8 p-8 rounded-4xl bg shadow-2xl border bg-muted/30 shadow-muted/70">
+          <div className="text-center flex flex-col items-center gap-2">
+            {/* <LineSquiggleIcon width={90} height={90} /> */}
+            <H1>Hi there!</H1>
+            <Muted>Please sign in to continue.</Muted>
           </div>
           <form
             className="flex flex-col gap-4 w-full"
@@ -163,14 +168,19 @@ export default function SignIn() {
             <Button
               type="submit"
               disabled={loading}
-              variant="default"
-              className="w-full rounded-lg"
+              variant="outline"
+              className="w-full rounded-lg mt-2"
             >
-              {loading
-                ? "Loading..."
-                : flow === "signIn"
-                  ? "Sign in"
-                  : "Sign up"}
+              {loading ? (
+                <>
+                  <Loader2Icon className="animate-spin" />
+                  Loading
+                </>
+              ) : flow === "signIn" ? (
+                "Sign in"
+              ) : (
+                "Sign up"
+              )}
             </Button>
             <div className="flex flex-row gap-2 text-sm justify-center">
               <span className="text-slate-600 dark:text-slate-400">
@@ -179,7 +189,7 @@ export default function SignIn() {
                   : "Already have an account?"}
               </span>
               <span
-                className="text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 font-medium underline decoration-2 underline-offset-2 hover:no-underline cursor-pointer transition-colors"
+                className="text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 font-medium hover:underline decoration-2 underline-offset-2 cursor-pointer transition-colors"
                 onClick={() => {
                   setFlow(flow === "signIn" ? "signUp" : "signIn")
                   setError(null)
@@ -188,6 +198,23 @@ export default function SignIn() {
                 {flow === "signIn" ? "Sign up" : "Sign in"}
               </span>
             </div>
+            <p className="text-xs text-slate-600 dark:text-slate-400 text-center px-2">
+              By continuing you are agreeing to our
+              <br />
+              <Link
+                href="https://plus.excalidraw.com/terms-of-service"
+                className="font-medium hover:underline decoration-2 underline-offset-2  text-slate-800 dark:text-slate-200"
+              >
+                Terms of Use
+              </Link>{" "}
+              and{" "}
+              <Link
+                href="https://plus.excalidraw.com/privacy-policy"
+                className="font-medium hover:underline decoration-2 underline-offset-2  text-slate-800 dark:text-slate-200"
+              >
+                Privacy Policy
+              </Link>
+            </p>
             {error && (
               <div className="bg-rose-500/10 border border-rose-500/30 dark:border-rose-500/50 rounded-lg p-4">
                 <p className="text-rose-700 dark:text-rose-300 font-medium text-sm">

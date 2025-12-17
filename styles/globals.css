@@ -43,6 +43,24 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --color-draw-orange: var(--draw-orange);
+  --color-draw-orange-foreground: var(--draw-orange-foreground);
+  --color-draw-gray: var(--draw-gray);
+  --color-draw-gray-foreground: var(--draw-gray-foreground);
+  --color-draw-brown: var(--draw-brown);
+  --color-draw-brown-foreground: var(--draw-brown-foreground);
+  --color-draw-yellow: var(--draw-yellow);
+  --color-draw-yellow-foreground: var(--draw-yellow-foreground);
+  --color-draw-green: var(--draw-green);
+  --color-draw-green-foreground: var(--draw-green-foreground);
+  --color-draw-blue: var(--draw-blue);
+  --color-draw-blue-foreground: var(--draw-blue-foreground);
+  --color-draw-purple: var(--draw-purple);
+  --color-draw-purple-foreground: var(--draw-purple-foreground);
+  --color-draw-pink: var(--draw-pink);
+  --color-draw-pink-foreground: var(--draw-pink-foreground);
+  --color-draw-red: var(--draw-red);
+  --color-draw-red-foreground: var(--draw-red-foreground);
 }
 
 :root {
@@ -160,6 +178,24 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  input:-webkit-autofill,
+  textarea:-webkit-autofill,
+  select:-webkit-autofill {
+    box-shadow: 0 0 0 1000px
+      color-mix(in oklab, var(--color-draw-orange) 80%, transparent) inset;
+    -webkit-text-fill-color: inherit;
+    transition: background-color 9999s ease-in-out 0s;
+  }
+
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill:focus,
+  select:-webkit-autofill:focus {
+    box-shadow: 0 0 0 1000px
+      color-mix(in oklab, var(--color-draw-orange) 80%, transparent) inset;
   }
 }
 

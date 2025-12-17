@@ -18,6 +18,7 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import {
+  type FocusEvent,
   type KeyboardEvent,
   type MutableRefObject,
   type RefObject,
@@ -456,12 +457,32 @@ export function FolderSection({
                                       e.target.value
                                     )
                                   }
-                                  onBlur={() => {
-                                    if (isEditingDrawing) {
-                                      void drawingHandlers.saveName(
-                                        drawing.drawingId
-                                      )
+                                  onBlur={(e: FocusEvent<HTMLInputElement>) => {
+                                    if (!isEditingDrawing) return
+
+                                    const related =
+                                      e.relatedTarget instanceof HTMLElement
+                                        ? e.relatedTarget
+                                        : null
+                                    const relatedLabel =
+                                      related?.getAttribute("aria-label") || ""
+                                    const shouldKeepEditing =
+                                      relatedLabel === "Drawing options" ||
+                                      related === null
+
+                                    if (shouldKeepEditing) {
+                                      requestAnimationFrame(() => {
+                                        if (inputRef.current) {
+                                          inputRef.current.focus()
+                                          inputRef.current.select()
+                                        }
+                                      })
+                                      return
                                     }
+
+                                    void drawingHandlers.saveName(
+                                      drawing.drawingId
+                                    )
                                   }}
                                   onKeyDown={(e) =>
                                     drawingHandlers.handleNameInputKeyDown(
