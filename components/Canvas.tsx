@@ -1,8 +1,15 @@
 "use client"
 
-import { useAction, useQuery } from "convex/react"
+import { useAction, useMutation, useQuery } from "convex/react"
 import { api } from "../convex/_generated/api"
-import { useEffect, useRef, useMemo, useCallback, useState } from "react"
+import {
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+  useState,
+  type KeyboardEvent
+} from "react"
 import dynamic from "next/dynamic"
 import "@excalidraw/excalidraw/index.css"
 import { useDrawing } from "../context/DrawingContext"
@@ -202,6 +209,108 @@ function useDebouncedCallback(
   }, [callback])
 
   return { debouncedCall, flush }
+}
+
+type EditableNameBadgeProps = {
+  drawingId?: string | null
+  name?: string | null
+  theme?: "light" | "dark"
+}
+
+function EditableNameBadge({
+  drawingId,
+  name,
+  theme = "dark"
+}: EditableNameBadgeProps) {
+  const updateName = useMutation(api.drawings.updateName)
+  const [draft, setDraft] = useState<string>(name?.trim() || "Untitled")
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  const clearPendingSave = useCallback(() => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+      saveTimeoutRef.current = null
+    }
+  }, [])
+
+  const persistName = useCallback(
+    async (value: string) => {
+      if (!drawingId) return
+      const nextValue = value.trim() || "Untitled"
+      try {
+        await updateName({ drawingId, name: nextValue })
+      } catch (error) {
+        console.error("Failed to update drawing name:", error)
+      }
+    },
+    [drawingId, updateName]
+  )
+
+  const scheduleSave = useCallback(
+    (value: string) => {
+      if (!drawingId) return
+      clearPendingSave()
+      const nextValue = value.trim() || "Untitled"
+      saveTimeoutRef.current = setTimeout(() => {
+        void persistName(nextValue)
+        saveTimeoutRef.current = null
+      }, 600)
+    },
+    [clearPendingSave, drawingId, persistName]
+  )
+
+  useEffect(() => {
+    return () => clearPendingSave()
+  }, [clearPendingSave])
+
+  const handleBlur = useCallback(() => {
+    clearPendingSave()
+    void persistName(draft)
+  }, [clearPendingSave, draft, persistName])
+
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === "Enter") {
+        event.preventDefault()
+        ;(event.currentTarget as HTMLInputElement).blur()
+      } else if (event.key === "Escape") {
+        event.currentTarget.blur()
+      }
+    },
+    []
+  )
+
+  const themeClass = theme === "dark" ? "text-[#E3E3E8]" : "text-[#1B1B1F]"
+
+  return (
+    <div className="hidden lg:flex pointer-events-auto absolute left-28 top-4 z-30 h-9 items-center">
+      <input
+        key={drawingId ?? "no-drawing"}
+        type="text"
+        value={draft}
+        onBlur={handleBlur}
+        onChange={(event) => {
+          const nextValue = event.target.value
+          setDraft(nextValue)
+          scheduleSave(nextValue)
+        }}
+        onKeyDown={handleKeyDown}
+        disabled={!drawingId}
+        aria-label="Drawing name"
+        className={cn(
+          "w-full min-w-[140px] bg-transparent border-none p-0 m-0 text-md font-medium",
+          "outline-none focus:outline-none focus:ring-0 focus:border-none",
+          "shadow-none rounded-none caret-inherit selection:bg-transparent",
+          "placeholder:text-muted-foreground",
+          "disabled:opacity-80 disabled:cursor-not-allowed",
+          themeClass
+        )}
+        style={{
+          WebkitAppearance: "none"
+        }}
+      />
+    </div>
+  )
 }
 
 export default function Canvas() {
@@ -631,25 +740,6 @@ export default function Canvas() {
     setDrawingTheme02(getDrawingTheme(drawing02?.data))
   }, [drawing02?.data, getDrawingTheme])
 
-  const renderNameBadge = useCallback(
-    (name?: string | null, theme: "light" | "dark" = "dark") => {
-      const label = name?.trim() || "Untitled"
-      return (
-        <div className="hidden lg:flex pointer-events-none absolute left-28 top-4 z-30 h-9 items-center">
-          <span
-            className={cn(
-              "text-md font-medium",
-              theme === "dark" ? "text-[#E3E3E8]" : "text-[#1B1B1F]"
-            )}
-          >
-            {label}
-          </span>
-        </div>
-      )
-    },
-    []
-  )
-
   return (
     <div className="h-full w-full relative">
       {/* drawing box 01 */}
@@ -666,7 +756,12 @@ export default function Canvas() {
                   : "z-20 opacity-100"
           )}
         >
-          {renderNameBadge(drawing01.data?.name, drawingTheme01)}
+          <EditableNameBadge
+            key={`${drawing01.drawingId ?? "drawing-01"}-${drawing01.data?.name ?? "unnamed"}`}
+            drawingId={drawing01.drawingId}
+            name={drawing01.data?.name}
+            theme={drawingTheme01}
+          />
           <Excalidraw
             key={keyWithFiles(drawing01.drawingId, files01)}
             initialData={initialData01}
@@ -687,7 +782,12 @@ export default function Canvas() {
                 : "z-20 opacity-100"
           )}
         >
-          {renderNameBadge(drawing02.data?.name, drawingTheme02)}
+          <EditableNameBadge
+            key={`${drawing02.drawingId ?? "drawing-02"}-${drawing02.data?.name ?? "unnamed"}`}
+            drawingId={drawing02.drawingId}
+            name={drawing02.data?.name}
+            theme={drawingTheme02}
+          />
           <Excalidraw
             key={keyWithFiles(drawing02.drawingId, files02)}
             initialData={initialData02}

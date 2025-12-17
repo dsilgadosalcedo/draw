@@ -725,19 +725,22 @@ export const updateName = mutation({
     }
 
     const userIdString = String(userId)
-    const existing = await ctx.db
-      .query("drawings")
-      .withIndex("by_userId_and_drawingId", (q) =>
-        q.eq("userId", userIdString).eq("drawingId", args.drawingId)
-      )
-      .first()
+    const { drawing, role } = await loadDrawingAndRole(
+      ctx,
+      args.drawingId,
+      userIdString
+    )
 
-    if (!existing || existing.isActive === false) {
+    if (!drawing || drawing.isActive === false) {
       throw new Error("Drawing not found")
     }
 
-    await ctx.db.patch(existing._id, {
-      name: args.name
+    if (role === null) {
+      throw new Error("Unauthorized")
+    }
+
+    await ctx.db.patch(drawing._id, {
+      name: args.name.trim() || "Untitled"
     })
 
     return null
