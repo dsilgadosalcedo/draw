@@ -4,9 +4,9 @@ import { useConvexAuth, useQuery } from "convex/react"
 import { api } from "../convex/_generated/api"
 import { useEffect } from "react"
 import dynamic from "next/dynamic"
-import { DrawingProvider, useDrawing } from "../context/DrawingContext"
-import Sidebar from "../components/Sidebar"
-import Connecting from "@/components/Connecting"
+import { DrawingProvider, useDrawing } from "../context/drawing-context"
+import Sidebar from "../components/sidebar/components/sidebar"
+import Connecting from "@/components/connecting"
 
 // 1. Dynamically import the Canvas component and disable SSR
 const Canvas = dynamic(() => import("../components/Canvas"), {

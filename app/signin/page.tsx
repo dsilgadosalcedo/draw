@@ -6,7 +6,6 @@ import { useState } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-// import { LineSquiggleIcon } from "lucide-react"
 import { H1, Muted } from "@/components/ui/typography"
 import Figures from "@/components/figures"
 import { Loader2Icon } from "lucide-react"
@@ -105,16 +104,6 @@ export default function SignIn() {
   const router = useRouter()
   return (
     <div className="relative w-full h-screen overflow-hidden">
-      {/* Background image with format fallback */}
-      {/* <picture className="absolute inset-0 w-full h-full">
-        <source srcSet="/golden-ratio.avif" type="image/avif" />
-        <img
-          src="/golden-ratio.jpg"
-          alt=""
-          className="w-full h-full object-cover dark:opacity-20"
-          aria-hidden="true"
-        />
-      </picture> */}
       <Figures />
       {/* Content */}
       <div className="relative grid place-items-center z-10 w-full max-w-lg mx-auto h-full justify-center items-center px-4">
