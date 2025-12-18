@@ -1,5 +1,9 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 
+# Validate Convex backend (TypeScript compilation + type generation)
+bunx convex codegen --typecheck enable
+
+# Build Next.js frontend
 bun run build
 
