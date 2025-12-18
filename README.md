@@ -1,46 +1,179 @@
-# Welcome to your Convex + Next.js + Convex Auth app
+# Draw
 
-This is a [Convex](https://convex.dev/) project created with [`npm create convex`](https://www.npmjs.com/package/create-convex).
+A modern, collaborative drawing application built with [Excalidraw](https://excalidraw.com/), [Next.js](https://nextjs.org/), and [Convex](https://www.convex.dev/). Create beautiful drawings, organize them in folders, and collaborate with others in real-time.
 
-After the initial setup (<2 minutes) you'll have a working full-stack app using:
+## Features
 
-- Convex as your backend (database, server logic)
-- [React](https://react.dev/) as your frontend (web page interactivity)
-- [Next.js](https://nextjs.org/) for optimized web hosting and page routing
-- [Tailwind](https://tailwindcss.com/) for building great looking accessible UI
-- [Convex Auth](https://labs.convex.dev/auth) for authentication
+- 🎨 **Powerful Drawing Tools** - Built on Excalidraw for a smooth, feature-rich drawing experience
+- 📁 **Organized Workspace** - Organize your drawings into folders with custom icons and colors
+- 💾 **Auto-Save** - Your work is automatically saved as you draw
+- 👥 **Collaboration** - Share drawings and collaborate with others in real-time
+- 🔐 **Secure Authentication** - User authentication powered by Convex Auth
+- 🌓 **Theme Support** - Light and dark themes for comfortable drawing
+- 📱 **Responsive Design** - Works seamlessly across different screen sizes
+- ⚡ **Real-Time Sync** - Instant updates across all connected clients
 
-## Get started
+## Tech Stack
 
-If you just cloned this codebase and didn't use `npm create convex`, run:
+- **Frontend**: Next.js 16, React 19, TypeScript
+- **Backend**: Convex (database, real-time sync, authentication)
+- **Drawing Engine**: Excalidraw
+- **Styling**: Tailwind CSS
+- **UI Components**: Radix UI
+- **Runtime**: Bun
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+- [Bun](https://bun.sh/) (>=1.0.0) or [Node.js](https://nodejs.org/) (>=18.0.0)
+- A [Convex](https://www.convex.dev/) account (free tier available)
+- Git
+
+## Installation
+
+1. **Clone the repository**
+
+```bash
+git clone <your-repo-url>
+cd draw
+```
+
+2. **Install dependencies**
+
+```bash
+bun install
+```
+
+3. **Set up Convex**
+
+If you haven't already, initialize Convex in your project:
+
+```bash
+bunx convex dev
+```
+
+This will:
+
+- Create a new Convex project (if needed)
+- Generate deployment credentials
+- Start the Convex development server
+
+4. **Configure environment variables**
+
+Create a `.env.local` file in the root directory:
+
+```env
+CONVEX_DEPLOYMENT=
+NEXT_PUBLIC_CONVEX_URL=
+```
+
+You can find these values in your [Convex dashboard](https://dashboard.convex.dev/).
+
+5. **Start the development servers**
+
+```bash
+bun run dev
+```
+
+This command runs both the Next.js frontend and Convex backend in parallel.
+
+The application will be available at [http://localhost:3000](http://localhost:3000).
+
+## Project Structure
 
 ```
-npm install
-npm run dev
+draw/
+├── app/                    # Next.js app directory
+│   ├── layout.tsx          # Root layout
+│   ├── page.tsx            # Main drawing workspace
+│   ├── signin/             # Authentication pages
+│   └── server/             # Server-side pages
+├── components/             # React components
+│   ├── Canvas.tsx          # Main drawing canvas component
+│   ├── Sidebar.tsx         # Sidebar with folders and drawings
+│   └── ui/                 # Reusable UI components
+├── convex/                 # Convex backend
+│   ├── schema.ts           # Database schema
+│   ├── drawings.ts         # Drawing mutations and queries
+│   ├── folders.ts          # Folder mutations and queries
+│   └── auth.ts             # Authentication configuration
+├── context/                # React context providers
+│   └── DrawingContext.tsx  # Drawing state management
+├── lib/                    # Utility functions
+└── styles/                 # Global styles
 ```
 
-If you're reading this README on GitHub and want to use this template, run:
+## Available Scripts
 
+- `bun run dev` - Start both frontend and backend development servers
+- `bun run dev:frontend` - Start only the Next.js frontend
+- `bun run dev:backend` - Start only the Convex backend
+- `bun run build` - Build the application for production
+- `bun run start` - Start the production server
+- `bun run lint` - Run ESLint to check code quality
+
+## Usage
+
+1. **Sign In**: Click the sign-in button to authenticate with your account
+2. **Create a Drawing**: Start drawing immediately - a new drawing is created automatically
+3. **Organize**: Use the sidebar to create folders and organize your drawings
+4. **Name Your Drawings**: Click on the drawing name at the top to rename it
+5. **Switch Drawings**: Click on any drawing in the sidebar to switch between drawings
+6. **Share**: Use the share dialog to collaborate with others
+
+## Development
+
+### Running in Development Mode
+
+```bash
+bun run dev
 ```
-npm create convex@latest -- -t nextjs-convexauth
+
+This starts:
+
+- Next.js dev server on `http://localhost:3000`
+- Convex dev server (handles backend and real-time sync)
+
+### Building for Production
+
+```bash
+bun run build
 ```
 
-## Learn more
+This creates an optimized production build in the `.next` directory.
 
-To learn more about developing your project with Convex, check out:
+### Deploying
 
-- The [Tour of Convex](https://docs.convex.dev/get-started) for a thorough introduction to Convex principles.
-- The rest of [Convex docs](https://docs.convex.dev/) to learn about all Convex features.
-- [Stack](https://stack.convex.dev/) for in-depth articles on advanced topics.
-- [Convex Auth docs](https://labs.convex.dev/auth) for documentation on the Convex Auth library.
+1. **Deploy Convex Backend**
 
-## Configuring other authentication methods
+```bash
+bunx convex deploy
+```
 
-To configure different authentication methods, see [Configuration](https://labs.convex.dev/auth/config) in the Convex Auth docs.
+2. **Deploy Frontend**
 
-## Join the community
+Deploy to your preferred platform (Vercel, Netlify, etc.):
 
-Join thousands of developers building full-stack apps with Convex:
+- **Vercel**: Connect your repository and deploy automatically
+- **Manual**: Run `bun run build` and deploy the `.next` directory
 
-- Join the [Convex Discord community](https://convex.dev/community) to get help in real-time.
-- Follow [Convex on GitHub](https://github.com/get-convex/), star and contribute to the open-source implementation of Convex.
+Make sure to set the environment variables in your deployment platform:
+
+- `CONVEX_DEPLOYMENT`
+- `NEXT_PUBLIC_CONVEX_URL`
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- [Excalidraw](https://excalidraw.com/) for the amazing drawing library
+- [Convex](https://www.convex.dev/) for the backend infrastructure
+- [Next.js](https://nextjs.org/) for the React framework
+- [Radix UI](https://www.radix-ui.com/) for accessible UI components

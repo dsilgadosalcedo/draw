@@ -1,15 +1,36 @@
 {
   "name": "draw",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.2.0",
+  "description": "A modern, collaborative drawing application built with Excalidraw, Next.js, and Convex",
+  "license": "MIT",
+  "keywords": [
+    "drawing",
+    "excalidraw",
+    "collaboration",
+    "nextjs",
+    "convex",
+    "real-time",
+    "canvas",
+    "whiteboard"
+  ],
+  "author": "David Silgado Salcedo <dsilgadosalcedo@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dsilgadosalcedo/draw"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  },
   "scripts": {
-    "dev": "npm-run-all --parallel dev:frontend dev:backend",
-    "dev:frontend": "next dev",
+    "dev": "bunx npm-run-all2 --parallel dev:frontend dev:backend",
+    "dev:frontend": "bun run --bun next dev",
     "dev:backend": "convex dev",
-    "predev": "convex dev --until-success && convex dev --once --run-sh \"node setup.mjs --once\" && convex dashboard",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint . --ignore-pattern \"convex/_generated/**\""
+    "build": "bun run --bun next build",
+    "start": "bun run --bun next start",
+    "lint": "eslint . --ignore-pattern \"convex/_generated/**\"",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "prepare": "husky"
   },
   "dependencies": {
     "@convex-dev/auth": "^0.0.90",
@@ -24,26 +45,37 @@
     "@radix-ui/react-visually-hidden": "^1.2.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "convex": "^1.31.1",
-    "lucide-react": "^0.561.0",
-    "next": "16.0.10",
+    "convex": "^1.31.2",
+    "lucide-react": "^0.562.0",
+    "next": "16.1.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
-    "@convex-dev/eslint-plugin": "^1.0.0",
-    "@tailwindcss/postcss": "^4.1.17",
-    "@types/node": "^20.19.25",
-    "@types/react": "^19.2.6",
+    "@convex-dev/eslint-plugin": "^1.1.1",
+    "@tailwindcss/postcss": "^4.1.18",
+    "@types/node": "^25.0.3",
+    "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "dotenv": "^17.2.3",
-    "eslint": "^9.39.1",
-    "eslint-config-next": "16.0.3",
+    "eslint": "^9.39.2",
+    "eslint-config-next": "16.1.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
     "npm-run-all2": "^8.0.4",
-    "prettier": "^3.6.2",
-    "tailwindcss": "^4.1.17",
+    "prettier": "^3.7.4",
+    "tailwindcss": "^4.1.18",
     "tw-animate-css": "^1.4.0",
     "typescript": "^5.9.3"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "eslint --fix --ignore-pattern \"convex/_generated/**\"",
+      "prettier --write"
+    ],
+    "*.{json,css,md}": [
+      "prettier --write"
+    ]
   }
 }
