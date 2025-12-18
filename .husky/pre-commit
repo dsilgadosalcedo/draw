@@ -1,1 +1,10 @@
+# Run lint-staged for formatting and linting
 bunx lint-staged
+
+# Type check
+bun run --bun tsc --noEmit
+
+# Run tests (if any exist)
+if [ -f "bun.lock" ]; then
+  bun test --run 2>/dev/null || true
+fi

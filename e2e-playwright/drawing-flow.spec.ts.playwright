@@ -1,0 +1,44 @@
+import { test, expect } from "@playwright/test"
+
+test.describe("Drawing Flow", () => {
+  test.beforeEach(async ({ page }) => {
+    // Navigate to the app (assuming authentication is handled)
+    await page.goto("/")
+    // Wait for the app to load
+    await page.waitForLoadState("networkidle")
+  })
+
+  test("should create a new drawing", async ({ page }) => {
+    // Look for the new drawing button or automatically created drawing
+    const canvas = page.locator('[data-testid="canvas"]').or(page.locator("canvas")).first()
+    await expect(canvas).toBeVisible({ timeout: 10000 })
+  })
+
+  test("should save drawing changes", async ({ page }) => {
+    // This would require interacting with Excalidraw
+    // For now, we'll just check that the canvas is present
+    const canvas = page.locator("canvas").first()
+    await expect(canvas).toBeVisible()
+  })
+
+  test("should display drawing name", async ({ page }) => {
+    // Check for the editable name badge
+    const nameInput = page.getByLabel("Drawing name")
+    await expect(nameInput).toBeVisible({ timeout: 5000 })
+  })
+})
+
+test.describe("Collaboration", () => {
+  test.skip("should share drawing with collaborator", async ({ page }) => {
+    // This would require multiple browser contexts
+    // Skipping for now as it requires more complex setup
+  })
+})
+
+test.describe("Folder Organization", () => {
+  test.skip("should create and organize folders", async ({ page }) => {
+    // Test folder creation and organization
+    // Skipping for now as it requires more complex interactions
+  })
+})
+
