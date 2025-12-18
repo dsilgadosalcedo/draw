@@ -2,23 +2,60 @@ import { useCallback, type KeyboardEvent } from "react"
 
 import { type SidebarDrawing } from "../types"
 
+/**
+ * Parameters for the useDrawingActions hook
+ */
 type DrawingActionParams = {
+  /** Current active drawing ID */
   currentDrawingId: string | null
+  /** All drawings for the current user */
   allDrawings: SidebarDrawing[] | undefined
+  /** Function to set the current drawing ID */
   setCurrentDrawingId: (id: string | null) => void
+  /** Mutation to update drawing name */
   updateName: (args: { drawingId: string; name: string }) => Promise<unknown>
+  /** Mutation to remove a drawing */
   removeDrawing: (args: { drawingId: string }) => Promise<unknown>
+  /** Mutation to move drawing to a folder */
   moveDrawingToFolder: (args: {
     drawingId: string
     folderId: string | null
   }) => Promise<unknown>
+  /** Function to create a new drawing */
   createNewDrawing: () => void
+  /** Function to set sidebar open state */
   setIsOpen: (value: boolean) => void
+  /** Current editing name value */
   editingName: string
+  /** Function to set editing name */
   setEditingName: (name: string) => void
+  /** Function to set editing ID */
   setEditingId: (id: string | null) => void
 }
 
+/**
+ * Hook for managing drawing actions in the sidebar
+ *
+ * @param params - Configuration object for drawing actions
+ * @returns Object containing action handlers
+ *
+ * @example
+ * ```tsx
+ * const drawingActions = useDrawingActions({
+ *   currentDrawingId,
+ *   allDrawings,
+ *   setCurrentDrawingId,
+ *   updateName,
+ *   removeDrawing,
+ *   // ... other params
+ * })
+ *
+ * // Use in component
+ * <button onClick={() => drawingActions.handleRemove(drawingId)}>
+ *   Delete
+ * </button>
+ * ```
+ */
 export function useDrawingActions({
   currentDrawingId,
   allDrawings,
