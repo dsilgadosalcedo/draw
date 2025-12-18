@@ -53,10 +53,3 @@ export function NewFolderDialog({
     </Dialog>
   )
 }
-
-
-
-
-
-
-

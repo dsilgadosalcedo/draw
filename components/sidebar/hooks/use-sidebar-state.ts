@@ -212,10 +212,3 @@ export function useSidebarState(
     filteredDrawings
   }
 }
-
-
-
-
-
-
-

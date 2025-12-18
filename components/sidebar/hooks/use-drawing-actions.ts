@@ -164,10 +164,3 @@ export function useDrawingActions({
     handleSelectDrawing
   }
 }
-
-
-
-
-
-
-

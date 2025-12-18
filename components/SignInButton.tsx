@@ -1,9 +1,9 @@
-"use client";
+"use client"
 
-import { useRouter } from "next/navigation";
+import { useRouter } from "next/navigation"
 
 export default function SignInButton() {
-  const router = useRouter();
+  const router = useRouter()
 
   return (
     <button
@@ -12,6 +12,5 @@ export default function SignInButton() {
     >
       Sign In to Start Drawing
     </button>
-  );
+  )
 }
-

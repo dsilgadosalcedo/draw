@@ -234,10 +234,3 @@ export function useFolderActions({
     handleNewFolderDialogKeyDown
   }
 }
-
-
-
-
-
-
-

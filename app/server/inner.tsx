@@ -1,14 +1,14 @@
-"use client";
+"use client"
 
-import { Preloaded, useMutation, usePreloadedQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
+import { Preloaded, useMutation, usePreloadedQuery } from "convex/react"
+import { api } from "../../convex/_generated/api"
 
 export default function Home({
-  preloaded,
+  preloaded
 }: {
-  preloaded: Preloaded<typeof api.drawings.list>;
+  preloaded: Preloaded<typeof api.drawings.list>
 }) {
-  const data = usePreloadedQuery(preloaded);
+  const data = usePreloadedQuery(preloaded)
   return (
     <div className="flex flex-col gap-4 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 p-6 rounded-xl shadow-md">
       <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200">
@@ -20,5 +20,5 @@ export default function Home({
         </pre>
       </code>
     </div>
-  );
+  )
 }
