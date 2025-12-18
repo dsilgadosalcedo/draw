@@ -14,6 +14,8 @@ import { serializeAppState, deserializeAppState } from "../utils/serialization"
 import { useDebouncedCallback } from "../hooks/use-debounced-callback"
 import { loadFiles } from "../utils/file-loader"
 import { EditableNameBadge } from "./editable-name-badge"
+import { ErrorBoundary } from "@/components/error-boundary"
+import { reportError, getConvexErrorMessage } from "@/lib/error-handling"
 
 const Excalidraw = dynamic(
   () => import("@excalidraw/excalidraw").then((mod) => mod.Excalidraw),
@@ -231,7 +233,9 @@ export default function Canvas() {
           appState: serializedAppState,
           files
         }).catch((err) => {
-          console.error("Failed to auto-save drawing:", err)
+          const errorMessage = getConvexErrorMessage(err)
+          reportError(err)
+          console.error("Failed to auto-save drawing:", errorMessage)
         })
       }
     },
@@ -288,29 +292,43 @@ export default function Canvas() {
   // Load files when drawing data changes
   useEffect(() => {
     if (drawing01?.data?.files) {
-      loadFiles(drawing01.data.files).then((files) => {
-        setFiles01(files)
-      })
+      loadFiles(drawing01.data.files)
+        .then((files) => {
+          setFiles01(files)
+        })
+        .catch((err) => {
+          reportError(err)
+          console.error("Failed to load files for drawing 01:", err)
+          // Set empty files on error to allow drawing to render
+          setFiles01({})
+        })
     } else {
       // Use setTimeout to avoid synchronous setState in effect
       setTimeout(() => {
         setFiles01(undefined)
       }, 0)
     }
-  }, [drawing01?.data?.files])
+  }, [drawing01?.data?.files, drawing01?.drawingId])
 
   useEffect(() => {
     if (drawing02?.data?.files) {
-      loadFiles(drawing02.data.files).then((files) => {
-        setFiles02(files)
-      })
+      loadFiles(drawing02.data.files)
+        .then((files) => {
+          setFiles02(files)
+        })
+        .catch((err) => {
+          reportError(err)
+          console.error("Failed to load files for drawing 02:", err)
+          // Set empty files on error to allow drawing to render
+          setFiles02({})
+        })
     } else {
       // Use setTimeout to avoid synchronous setState in effect
       setTimeout(() => {
         setFiles02(undefined)
       }, 0)
     }
-  }, [drawing02?.data?.files])
+  }, [drawing02?.data?.files, drawing02?.drawingId])
 
   // Helper to compute initial data for a specific drawing
   const computeInitialData = useCallback(
@@ -422,60 +440,82 @@ export default function Canvas() {
   }, [computedTheme02])
 
   return (
-    <div className="h-full w-full relative">
-      {/* drawing box 01 */}
-      {drawing01 && isReadyWithFiles(drawing01, files01) && (
-        <div
-          className={cn(
-            "absolute top-0 left-0 h-full w-full transition-opacity duration-500",
-            initialFadeInBox01
-              ? "z-20 opacity-0"
-              : beforeAppearingBox01Fade === true
+    <ErrorBoundary>
+      <div className="h-full w-full relative">
+        {/* drawing box 01 */}
+        {drawing01 && isReadyWithFiles(drawing01, files01) && (
+          <div
+            className={cn(
+              "absolute top-0 left-0 h-full w-full transition-opacity duration-500",
+              initialFadeInBox01
+                ? "z-20 opacity-0"
+                : beforeAppearingBox01Fade === true
+                  ? "z-10 opacity-100"
+                  : fadingOutBox01
+                    ? "z-20 opacity-0"
+                    : "z-20 opacity-100"
+            )}
+          >
+            <EditableNameBadge
+              key={`${drawing01.drawingId ?? "drawing-01"}-${drawing01.data?.name ?? "unnamed"}`}
+              drawingId={drawing01.drawingId}
+              name={drawing01.data?.name}
+              theme={drawingTheme01}
+            />
+            <ErrorBoundary
+              fallback={
+                <div className="flex items-center justify-center h-full">
+                  <p className="text-muted-foreground">
+                    Failed to load drawing. Please try refreshing.
+                  </p>
+                </div>
+              }
+            >
+              <Excalidraw
+                key={keyWithFiles(drawing01.drawingId, files01)}
+                initialData={initialData01}
+                onChange={handleChange01}
+              />
+            </ErrorBoundary>
+          </div>
+        )}
+
+        {/* drawing box 02 */}
+        {drawing02 && isReadyWithFiles(drawing02, files02) && (
+          <div
+            className={cn(
+              "absolute top-0 left-0 h-full w-full transition-opacity duration-500",
+              beforeAppearingBox02Fade === true
                 ? "z-10 opacity-100"
-                : fadingOutBox01
+                : fadingOutBox02
                   ? "z-20 opacity-0"
                   : "z-20 opacity-100"
-          )}
-        >
-          <EditableNameBadge
-            key={`${drawing01.drawingId ?? "drawing-01"}-${drawing01.data?.name ?? "unnamed"}`}
-            drawingId={drawing01.drawingId}
-            name={drawing01.data?.name}
-            theme={drawingTheme01}
-          />
-          <Excalidraw
-            key={keyWithFiles(drawing01.drawingId, files01)}
-            initialData={initialData01}
-            onChange={handleChange01}
-          />
-        </div>
-      )}
-
-      {/* drawing box 02 */}
-      {drawing02 && isReadyWithFiles(drawing02, files02) && (
-        <div
-          className={cn(
-            "absolute top-0 left-0 h-full w-full transition-opacity duration-500",
-            beforeAppearingBox02Fade === true
-              ? "z-10 opacity-100"
-              : fadingOutBox02
-                ? "z-20 opacity-0"
-                : "z-20 opacity-100"
-          )}
-        >
-          <EditableNameBadge
-            key={`${drawing02.drawingId ?? "drawing-02"}-${drawing02.data?.name ?? "unnamed"}`}
-            drawingId={drawing02.drawingId}
-            name={drawing02.data?.name}
-            theme={drawingTheme02}
-          />
-          <Excalidraw
-            key={keyWithFiles(drawing02.drawingId, files02)}
-            initialData={initialData02}
-            onChange={handleChange02}
-          />
-        </div>
-      )}
-    </div>
+            )}
+          >
+            <EditableNameBadge
+              key={`${drawing02.drawingId ?? "drawing-02"}-${drawing02.data?.name ?? "unnamed"}`}
+              drawingId={drawing02.drawingId}
+              name={drawing02.data?.name}
+              theme={drawingTheme02}
+            />
+            <ErrorBoundary
+              fallback={
+                <div className="flex items-center justify-center h-full">
+                  <p className="text-muted-foreground">
+                    Failed to load drawing. Please try refreshing.
+                  </p>
+                </div>
+              }
+            >
+              <Excalidraw
+                key={keyWithFiles(drawing02.drawingId, files02)}
+                initialData={initialData02}
+                onChange={handleChange02}
+              />
+            </ErrorBoundary>
+          </div>
+        )}
+      </div>
+    </ErrorBoundary>
   )
 }
