@@ -80,6 +80,11 @@ export const create = mutation({
   }
 })
 
+/**
+ * Updates the name of a folder
+ * @param args - Folder ID and new name
+ * @throws {Error} If user is unauthorized, folder not found, or name is invalid
+ */
 export const updateName = mutation({
   args: {
     folderId: v.string(),
@@ -90,6 +95,15 @@ export const updateName = mutation({
     const userId = await getAuthUserId(ctx)
     if (userId === null) {
       throw new Error("Unauthorized")
+    }
+
+    // Validate and sanitize name
+    const trimmedName = args.name.trim()
+    if (trimmedName.length === 0) {
+      throw new Error("Folder name cannot be empty")
+    }
+    if (trimmedName.length > 50) {
+      throw new Error("Folder name must be at most 50 characters")
     }
 
     const userIdString = String(userId)
@@ -105,7 +119,7 @@ export const updateName = mutation({
     }
 
     await ctx.db.patch(existing._id, {
-      name: args.name.trim()
+      name: trimmedName
     })
 
     return null
