@@ -1,6 +1,6 @@
 "use client"
 
-import Figures from "@/components/figures"
+import Figures from "@/components/sign-in/components/figures"
 import { useSignInForm } from "../hooks/use-sign-in-form"
 import { SignInHeader } from "./sign-in-header"
 import { SignInForm } from "./sign-in-form"
