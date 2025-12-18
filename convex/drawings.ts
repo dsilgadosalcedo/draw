@@ -11,6 +11,11 @@ import type { QueryCtx, MutationCtx, ActionCtx } from "./_generated/server"
 import { getAuthUserId } from "@convex-dev/auth/server"
 import { Id, Doc } from "./_generated/dataModel"
 import { api, internal } from "./_generated/api"
+import {
+  excalidrawElement,
+  excalidrawAppState,
+  binaryFiles
+} from "./validators/excalidraw-validators"
 
 // Type for Excalidraw file data (can be Blob, dataURL, or mimeType+data)
 type ExcalidrawFileData =
@@ -210,8 +215,8 @@ export const updateUserStorageInternal = internalMutation({
 export const save = mutation({
   args: {
     drawingId: v.string(),
-    elements: v.any(),
-    appState: v.any(),
+    elements: excalidrawElement,
+    appState: excalidrawAppState,
     files: v.optional(v.record(v.string(), v.id("_storage"))) // Map of fileId -> storageId
   },
   returns: v.null(),
@@ -258,12 +263,36 @@ export const save = mutation({
   }
 })
 
+/**
+ * Saves drawing with file handling (uploads new files, deletes removed files)
+ *
+ * This action handles the complete file lifecycle:
+ * - Uploads new files to Convex storage
+ * - Keeps existing files that are still present
+ * - Deletes files that were removed from the drawing
+ * - Updates user storage totals
+ *
+ * @param args - Drawing ID, elements, appState, and BinaryFiles
+ * @returns null
+ * @throws {Error} "Unauthorized" if user doesn't have access
+ * @throws {Error} "Drawing not found" if drawing is inactive
+ *
+ * @example
+ * ```typescript
+ * await saveWithFiles({
+ *   drawingId: "drawing-123",
+ *   elements: [...],
+ *   appState: {...},
+ *   files: {fileId: Blob}
+ * })
+ * ```
+ */
 export const saveWithFiles = action({
   args: {
     drawingId: v.string(),
-    elements: v.any(),
-    appState: v.any(),
-    files: v.optional(v.any()) // BinaryFiles from Excalidraw
+    elements: excalidrawElement,
+    appState: excalidrawAppState,
+    files: binaryFiles // BinaryFiles from Excalidraw
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -385,8 +414,8 @@ export const get = query({
       userId: v.string(),
       drawingId: v.string(),
       name: v.string(),
-      elements: v.any(),
-      appState: v.any(),
+      elements: excalidrawElement,
+      appState: excalidrawAppState,
       files: v.optional(v.record(v.string(), v.string())) // Map of fileId -> URL
     }),
     v.null()
@@ -753,6 +782,11 @@ export const leaveCollaboration = mutation({
   }
 })
 
+/**
+ * Updates the name of a drawing
+ * @param args - Drawing ID and new name
+ * @throws {Error} If user is unauthorized or drawing not found
+ */
 export const updateName = mutation({
   args: {
     drawingId: v.string(),
@@ -763,6 +797,12 @@ export const updateName = mutation({
     const userId = await getAuthUserId(ctx)
     if (userId === null) {
       throw new Error("Unauthorized")
+    }
+
+    // Validate and sanitize name
+    const trimmedName = args.name.trim()
+    if (trimmedName.length > 100) {
+      throw new Error("Drawing name must be at most 100 characters")
     }
 
     const userIdString = String(userId)
@@ -781,7 +821,7 @@ export const updateName = mutation({
     }
 
     await ctx.db.patch(drawing._id, {
-      name: args.name.trim() || "Untitled"
+      name: trimmedName || "Untitled"
     })
 
     return null
