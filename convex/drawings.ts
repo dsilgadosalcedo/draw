@@ -7,15 +7,49 @@ import {
   internalQuery,
   internalAction
 } from "./_generated/server"
+import type { QueryCtx, MutationCtx, ActionCtx } from "./_generated/server"
 import { getAuthUserId } from "@convex-dev/auth/server"
-import { Id } from "./_generated/dataModel"
+import { Id, Doc } from "./_generated/dataModel"
 import { api, internal } from "./_generated/api"
 
+// Type for Excalidraw file data (can be Blob, dataURL, or mimeType+data)
+type ExcalidrawFileData =
+  | Blob
+  | { dataURL: string; mimeType?: string }
+  | { mimeType: string; data: string | Uint8Array }
+
+// Type guard to check if fileData has dataURL
+function hasDataURL(
+  fileData: ExcalidrawFileData
+): fileData is { dataURL: string; mimeType?: string } {
+  return (
+    typeof fileData === "object" &&
+    !(fileData instanceof Blob) &&
+    "dataURL" in fileData
+  )
+}
+
+// Type guard to check if fileData has mimeType and data
+function hasMimeTypeAndData(
+  fileData: ExcalidrawFileData
+): fileData is { mimeType: string; data: string | Uint8Array } {
+  return (
+    typeof fileData === "object" &&
+    !(fileData instanceof Blob) &&
+    "mimeType" in fileData &&
+    "data" in fileData
+  )
+}
+
 // Helper function to update user storage total
-async function updateUserStorage(ctx: any, userId: string, bytesDelta: number) {
+async function updateUserStorage(
+  ctx: MutationCtx,
+  userId: string,
+  bytesDelta: number
+) {
   const existing = await ctx.db
     .query("userStorage")
-    .withIndex("by_userId", (q: any) => q.eq("userId", userId))
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
     .first()
 
   if (existing) {
@@ -31,14 +65,14 @@ async function updateUserStorage(ctx: any, userId: string, bytesDelta: number) {
 }
 
 // Helper to convert diverse payloads coming from Excalidraw into blobs
-function toBlob(fileData: any): Blob | null {
+function toBlob(fileData: ExcalidrawFileData): Blob | null {
   if (!fileData) return null
 
   if (fileData instanceof Blob) {
     return fileData
   }
 
-  if (fileData.dataURL) {
+  if (hasDataURL(fileData)) {
     const dataURL: string = fileData.dataURL
     const base64Match = dataURL.match(/^data:([^;]+);base64,(.+)$/)
     const base64Data = base64Match
@@ -54,11 +88,17 @@ function toBlob(fileData: any): Blob | null {
     return new Blob([bytes], { type: mimeType })
   }
 
-  if (fileData.mimeType && fileData.data) {
-    const base64Data =
-      typeof fileData.data === "string"
-        ? (fileData.data.split(",")[1] ?? fileData.data)
-        : fileData.data
+  if (hasMimeTypeAndData(fileData)) {
+    let base64Data: string
+    if (typeof fileData.data === "string") {
+      base64Data = fileData.data.split(",")[1] ?? fileData.data
+    } else {
+      // Convert Uint8Array to base64 string
+      const binaryString = Array.from(fileData.data)
+        .map((byte) => String.fromCharCode(byte))
+        .join("")
+      base64Data = btoa(binaryString)
+    }
     const binary = atob(base64Data)
     const bytes = new Uint8Array(binary.length)
     for (let i = 0; i < binary.length; i++) {
@@ -77,8 +117,8 @@ function toBlob(fileData: any): Blob | null {
 
 // Helper function to upload files and return storage IDs mapped by fileId
 async function uploadFiles(
-  ctx: any,
-  files: Record<string, any>
+  ctx: ActionCtx,
+  files: Record<string, ExcalidrawFileData>
 ): Promise<{ fileMap: Record<string, Id<"_storage">>; totalBytes: number }> {
   const fileMap: Record<string, Id<"_storage">> = {}
   let totalBytes = 0
@@ -97,7 +137,7 @@ async function uploadFiles(
 
 // Helper function to get file URLs from storage ID map
 async function getFileUrls(
-  ctx: any,
+  ctx: QueryCtx | ActionCtx,
   fileMap: Record<string, Id<"_storage">> | undefined
 ): Promise<Record<string, string>> {
   if (!fileMap || Object.keys(fileMap).length === 0) {
@@ -119,13 +159,13 @@ async function getFileUrls(
 type DrawingAccessRole = "owner" | "collaborator" | null
 
 async function loadDrawingAndRole(
-  ctx: any,
+  ctx: QueryCtx | MutationCtx,
   drawingId: string,
   userId: string
-): Promise<{ drawing: any | null; role: DrawingAccessRole }> {
+): Promise<{ drawing: Doc<"drawings"> | null; role: DrawingAccessRole }> {
   const drawing = await ctx.db
     .query("drawings")
-    .withIndex("by_drawingId", (q: any) => q.eq("drawingId", drawingId))
+    .withIndex("by_drawingId", (q) => q.eq("drawingId", drawingId))
     .first()
 
   if (!drawing || drawing.isActive === false) {
@@ -138,7 +178,7 @@ async function loadDrawingAndRole(
 
   const collaborator = await ctx.db
     .query("drawingCollaborators")
-    .withIndex("by_collaborator_and_drawingId", (q: any) =>
+    .withIndex("by_collaborator_and_drawingId", (q) =>
       q.eq("collaboratorUserId", userId).eq("drawingId", drawingId)
     )
     .first()
@@ -206,7 +246,7 @@ export const save = mutation({
       await ctx.db.insert("drawings", {
         userId: userIdString,
         drawingId: args.drawingId,
-        name: "Draw",
+        name: "Drawing",
         elements: args.elements,
         appState: args.appState,
         files: args.files,
@@ -258,7 +298,7 @@ export const saveWithFiles = action({
       Object.keys(args.files).length > 0
 
     if (providedFiles) {
-      const incomingFiles = args.files as Record<string, any>
+      const incomingFiles = args.files as Record<string, ExcalidrawFileData>
       const existingFiles = existing?.files ?? {}
       const mergedFileMap: Record<string, Id<"_storage">> = {}
 
@@ -270,7 +310,7 @@ export const saveWithFiles = action({
       }
 
       // 2) Upload only truly new files (ids not already stored)
-      const filesToUpload: Record<string, any> = {}
+      const filesToUpload: Record<string, ExcalidrawFileData> = {}
       for (const [fileId, fileData] of Object.entries(incomingFiles)) {
         if (!existingFiles[fileId]) {
           filesToUpload[fileId] = fileData
@@ -535,11 +575,12 @@ export const listCollaborators = query({
 
     const results = []
     for (const entry of collaborators) {
-      const userDoc = await ctx.db.get(entry.collaboratorUserId as any)
+      const userDoc = await ctx.db.get(entry.collaboratorUserId as Id<"users">)
+      const user = userDoc as Doc<"users"> | null
       results.push({
         collaboratorUserId: entry.collaboratorUserId,
-        email: (userDoc as any)?.email,
-        name: (userDoc as any)?.name,
+        email: user?.email,
+        name: user?.name,
         addedByUserId: entry.addedByUserId
       })
     }
@@ -600,7 +641,7 @@ export const addCollaboratorByEmail = mutation({
 
     const targetUser = await ctx.db
       .query("users")
-      .withIndex("email", (q: any) => q.eq("email", normalizedEmail))
+      .withIndex("email", (q) => q.eq("email", normalizedEmail))
       .first()
 
     if (!targetUser) {
@@ -615,7 +656,7 @@ export const addCollaboratorByEmail = mutation({
 
     const existingCollaborator = await ctx.db
       .query("drawingCollaborators")
-      .withIndex("by_collaborator_and_drawingId", (q: any) =>
+      .withIndex("by_collaborator_and_drawingId", (q) =>
         q.eq("collaboratorUserId", targetUserId).eq("drawingId", args.drawingId)
       )
       .first()
@@ -667,7 +708,7 @@ export const removeCollaborator = mutation({
 
     const existing = await ctx.db
       .query("drawingCollaborators")
-      .withIndex("by_collaborator_and_drawingId", (q: any) =>
+      .withIndex("by_collaborator_and_drawingId", (q) =>
         q
           .eq("collaboratorUserId", args.collaboratorUserId)
           .eq("drawingId", args.drawingId)

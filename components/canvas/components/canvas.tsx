@@ -1,317 +1,24 @@
 "use client"
 
-import { useAction, useMutation, useQuery } from "convex/react"
-import { api } from "../convex/_generated/api"
-import {
-  useEffect,
-  useRef,
-  useMemo,
-  useCallback,
-  useState,
-  type KeyboardEvent
-} from "react"
+import { useAction, useQuery } from "convex/react"
+import { api } from "../../../convex/_generated/api"
+import { useEffect, useRef, useMemo, useCallback, useState } from "react"
 import dynamic from "next/dynamic"
 import "@excalidraw/excalidraw/index.css"
-import { useDrawing } from "../context/DrawingContext"
+import { useDrawing } from "../../../context/drawing-context"
 import { AppState, BinaryFiles } from "@excalidraw/excalidraw/types"
 import { OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types"
 import { cn } from "@/lib/utils"
-
-// Type for JSON-serializable AppState (after serialization)
-type SerializedAppState = {
-  [key: string]: unknown
-}
-
-// Type for the drawing data returned from Convex
-type DrawingData = {
-  _id: string
-  _creationTime: number
-  userId: string
-  drawingId: string
-  name: string
-  elements: readonly OrderedExcalidrawElement[] | null
-  appState: SerializedAppState | null
-  files?: Record<string, string> // Map of fileId -> URL
-} | null
-
-// Helper function to serialize any value (handles nested structures)
-function serializeValue(value: unknown): unknown {
-  if (value === null || value === undefined) {
-    return value
-  }
-
-  if (value instanceof Set) {
-    return Array.from(value).map(serializeValue)
-  }
-
-  if (value instanceof Map) {
-    return Object.fromEntries(
-      Array.from(value.entries()).map(([k, v]) => [k, serializeValue(v)])
-    )
-  }
-
-  if (Array.isArray(value)) {
-    return value.map(serializeValue)
-  }
-
-  if (typeof value === "object") {
-    const serialized: SerializedAppState = {}
-    for (const key in value) {
-      if (Object.prototype.hasOwnProperty.call(value, key)) {
-        serialized[key] = serializeValue(
-          (value as Record<string, unknown>)[key]
-        )
-      }
-    }
-    return serialized
-  }
-
-  return value
-}
-
-function serializeAppState(
-  appState: AppState | null | undefined
-): SerializedAppState | null | undefined {
-  const serialized = serializeValue(appState)
-  return serialized as SerializedAppState | null | undefined
-}
-
-// Helper function to deserialize any value (handles nested structures)
-function deserializeValue(value: unknown): unknown {
-  if (value === null || value === undefined) {
-    return value
-  }
-
-  if (Array.isArray(value)) {
-    return value.map(deserializeValue)
-  }
-
-  if (typeof value === "object") {
-    const deserialized: Record<string, unknown> = {}
-    for (const key in value) {
-      if (Object.prototype.hasOwnProperty.call(value, key)) {
-        const val = (value as Record<string, unknown>)[key]
-        // Convert followedBy back to Set if it's an array
-        if (key === "followedBy" && Array.isArray(val)) {
-          deserialized[key] = new Set(val.map(deserializeValue))
-        } else if (key === "collaborators") {
-          // Remove collaborators to prevent Map vs Object crash
-          deserialized[key] = undefined
-        } else {
-          deserialized[key] = deserializeValue(val)
-        }
-      }
-    }
-    return deserialized
-  }
-
-  return value
-}
-
-function deserializeAppState(
-  appState: SerializedAppState | null | undefined
-): Partial<AppState> | null | undefined {
-  const deserialized = deserializeValue(appState)
-  return deserialized as Partial<AppState> | null | undefined
-}
+import { type DrawingData } from "../types"
+import { serializeAppState, deserializeAppState } from "../utils/serialization"
+import { useDebouncedCallback } from "../hooks/use-debounced-callback"
+import { loadFiles } from "../utils/file-loader"
+import { EditableNameBadge } from "./editable-name-badge"
 
 const Excalidraw = dynamic(
   () => import("@excalidraw/excalidraw").then((mod) => mod.Excalidraw),
   { ssr: false }
 )
-
-function useDebouncedCallback(
-  callback: (
-    elements: readonly OrderedExcalidrawElement[],
-    appState: AppState,
-    files: BinaryFiles,
-    drawingId: string | null
-  ) => void,
-  delay: number = 500
-) {
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const pendingElementsRef = useRef<readonly OrderedExcalidrawElement[] | null>(
-    null
-  )
-  const pendingAppStateRef = useRef<AppState | null>(null)
-  const pendingFilesRef = useRef<BinaryFiles | null>(null)
-  const pendingDrawingIdRef = useRef<string | null>(null)
-
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-      }
-    }
-  }, [])
-
-  const debouncedCall = useCallback(
-    (
-      elements: readonly OrderedExcalidrawElement[],
-      appState: AppState,
-      files: BinaryFiles,
-      drawingId: string | null
-    ) => {
-      // Store the latest values along with the drawingId
-      pendingElementsRef.current = elements
-      pendingAppStateRef.current = appState
-      pendingFilesRef.current = files
-      pendingDrawingIdRef.current = drawingId
-
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-      }
-      timeoutRef.current = setTimeout(() => {
-        if (
-          pendingElementsRef.current &&
-          pendingAppStateRef.current &&
-          pendingFilesRef.current &&
-          pendingDrawingIdRef.current !== null
-        ) {
-          callback(
-            pendingElementsRef.current,
-            pendingAppStateRef.current,
-            pendingFilesRef.current,
-            pendingDrawingIdRef.current
-          )
-          pendingElementsRef.current = null
-          pendingAppStateRef.current = null
-          pendingFilesRef.current = null
-          pendingDrawingIdRef.current = null
-        }
-      }, delay)
-    },
-    [callback, delay]
-  )
-
-  const flush = useCallback(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current)
-      timeoutRef.current = null
-    }
-    if (
-      pendingElementsRef.current &&
-      pendingAppStateRef.current &&
-      pendingFilesRef.current &&
-      pendingDrawingIdRef.current !== null
-    ) {
-      callback(
-        pendingElementsRef.current,
-        pendingAppStateRef.current,
-        pendingFilesRef.current,
-        pendingDrawingIdRef.current
-      )
-      pendingElementsRef.current = null
-      pendingAppStateRef.current = null
-      pendingFilesRef.current = null
-      pendingDrawingIdRef.current = null
-    }
-  }, [callback])
-
-  return { debouncedCall, flush }
-}
-
-type EditableNameBadgeProps = {
-  drawingId?: string | null
-  name?: string | null
-  theme?: "light" | "dark"
-}
-
-function EditableNameBadge({
-  drawingId,
-  name,
-  theme = "dark"
-}: EditableNameBadgeProps) {
-  const updateName = useMutation(api.drawings.updateName)
-  const [draft, setDraft] = useState<string>(name?.trim() || "Untitled")
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-
-  const clearPendingSave = useCallback(() => {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current)
-      saveTimeoutRef.current = null
-    }
-  }, [])
-
-  const persistName = useCallback(
-    async (value: string) => {
-      if (!drawingId) return
-      const nextValue = value.trim() || "Untitled"
-      try {
-        await updateName({ drawingId, name: nextValue })
-      } catch (error) {
-        console.error("Failed to update drawing name:", error)
-      }
-    },
-    [drawingId, updateName]
-  )
-
-  const scheduleSave = useCallback(
-    (value: string) => {
-      if (!drawingId) return
-      clearPendingSave()
-      const nextValue = value.trim() || "Untitled"
-      saveTimeoutRef.current = setTimeout(() => {
-        void persistName(nextValue)
-        saveTimeoutRef.current = null
-      }, 600)
-    },
-    [clearPendingSave, drawingId, persistName]
-  )
-
-  useEffect(() => {
-    return () => clearPendingSave()
-  }, [clearPendingSave])
-
-  const handleBlur = useCallback(() => {
-    clearPendingSave()
-    void persistName(draft)
-  }, [clearPendingSave, draft, persistName])
-
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLInputElement>) => {
-      if (event.key === "Enter") {
-        event.preventDefault()
-        ;(event.currentTarget as HTMLInputElement).blur()
-      } else if (event.key === "Escape") {
-        event.currentTarget.blur()
-      }
-    },
-    []
-  )
-
-  const themeClass = theme === "dark" ? "text-[#E3E3E8]" : "text-[#1B1B1F]"
-
-  return (
-    <div className="hidden lg:flex pointer-events-auto absolute left-28 top-4 z-30 h-9 items-center">
-      <input
-        key={drawingId ?? "no-drawing"}
-        type="text"
-        value={draft}
-        onBlur={handleBlur}
-        onChange={(event) => {
-          const nextValue = event.target.value
-          setDraft(nextValue)
-          scheduleSave(nextValue)
-        }}
-        onKeyDown={handleKeyDown}
-        disabled={!drawingId}
-        aria-label="Drawing name"
-        className={cn(
-          "w-full min-w-[140px] bg-transparent border-none p-0 m-0 text-md font-medium",
-          "outline-none focus:outline-none focus:ring-0 focus:border-none",
-          "shadow-none rounded-none caret-inherit selection:bg-transparent",
-          "placeholder:text-muted-foreground",
-          "disabled:opacity-80 disabled:cursor-not-allowed",
-          themeClass
-        )}
-        style={{
-          WebkitAppearance: "none"
-        }}
-      />
-    </div>
-  )
-}
 
 export default function Canvas() {
   const { currentDrawingId: drawingId } = useDrawing()
@@ -384,12 +91,19 @@ export default function Canvas() {
       return
     }
 
-    // Skip if this drawing is already displayed in one of the boxes
+    // Skip if this drawing is already displayed in one of the boxes AND the data hasn't changed
     // Use refs to get current values without triggering effect re-runs
-    if (
-      drawing01Ref.current?.drawingId === drawingId ||
-      drawing02Ref.current?.drawingId === drawingId
-    ) {
+    const existingIn01 = drawing01Ref.current?.drawingId === drawingId
+    const existingIn02 = drawing02Ref.current?.drawingId === drawingId
+
+    // If drawing exists in a box, update it with new data (e.g., when name changes from undefined to "Drawing")
+    if (existingIn01) {
+      setDrawing01({ drawingId, data: drawing })
+      return
+    }
+
+    if (existingIn02) {
+      setDrawing02({ drawingId, data: drawing })
       return
     }
 
@@ -402,11 +116,14 @@ export default function Canvas() {
       fadeTimeoutRef.current = null
       // Reset fade states that might be stuck from previous transition
       // This ensures clean state for the new transition
-      setFadingOutBox01(false)
-      setFadingOutBox02(false)
-      setBeforeAppearingBox01Fade(null)
-      setBeforeAppearingBox02Fade(null)
-      setInitialFadeInBox01(false)
+      // Using setTimeout to avoid synchronous setState in effect
+      setTimeout(() => {
+        setFadingOutBox01(false)
+        setFadingOutBox02(false)
+        setBeforeAppearingBox01Fade(null)
+        setBeforeAppearingBox02Fade(null)
+        setInitialFadeInBox01(false)
+      }, 0)
     }
 
     // Check if drawing01 is occupied (use refs to avoid dependency issues)
@@ -568,79 +285,32 @@ export default function Canvas() {
   const [files01, setFiles01] = useState<BinaryFiles | undefined>(undefined)
   const [files02, setFiles02] = useState<BinaryFiles | undefined>(undefined)
 
-  // Helper function to load files from URLs
-  const loadFiles = useCallback(
-    async (fileUrls: Record<string, string> | undefined) => {
-      if (!fileUrls || Object.keys(fileUrls).length === 0) {
-        return undefined
-      }
-
-      const loadedFiles: BinaryFiles = {} as BinaryFiles
-      for (const [fileId, url] of Object.entries(fileUrls)) {
-        try {
-          const response = await fetch(url)
-          const blob = await response.blob()
-          const dataURL = await new Promise<string>((resolve) => {
-            const reader = new FileReader()
-            reader.onloadend = () => resolve(reader.result as string)
-            reader.readAsDataURL(blob)
-          })
-
-          // Map blob type to valid Excalidraw mime type
-          // Valid types: image/png, image/jpeg, image/gif, image/webp, image/svg+xml, image/bmp, image/x-icon, image/avif, image/jfif, or application/octet-stream
-          let mimeType: string = blob.type || "image/png"
-          const validImageTypes = [
-            "image/png",
-            "image/jpeg",
-            "image/jpg",
-            "image/gif",
-            "image/webp",
-            "image/svg+xml",
-            "image/bmp",
-            "image/x-icon",
-            "image/avif",
-            "image/jfif"
-          ]
-          // Normalize jpg to jpeg
-          if (mimeType === "image/jpg") {
-            mimeType = "image/jpeg"
-          }
-          if (!validImageTypes.includes(mimeType)) {
-            mimeType = "application/octet-stream"
-          }
-
-          loadedFiles[fileId as any] = {
-            id: fileId as any,
-            mimeType: mimeType as any,
-            dataURL: dataURL as any,
-            created: Date.now()
-          }
-        } catch (error) {
-          console.error("Error loading file:", error)
-        }
-      }
-
-      return loadedFiles
-    },
-    []
-  )
-
   // Load files when drawing data changes
   useEffect(() => {
     if (drawing01?.data?.files) {
-      loadFiles(drawing01.data.files).then((files) => setFiles01(files))
+      loadFiles(drawing01.data.files).then((files) => {
+        setFiles01(files)
+      })
     } else {
-      setFiles01(undefined)
+      // Use setTimeout to avoid synchronous setState in effect
+      setTimeout(() => {
+        setFiles01(undefined)
+      }, 0)
     }
-  }, [drawing01?.data?.files, loadFiles])
+  }, [drawing01?.data?.files])
 
   useEffect(() => {
     if (drawing02?.data?.files) {
-      loadFiles(drawing02.data.files).then((files) => setFiles02(files))
+      loadFiles(drawing02.data.files).then((files) => {
+        setFiles02(files)
+      })
     } else {
-      setFiles02(undefined)
+      // Use setTimeout to avoid synchronous setState in effect
+      setTimeout(() => {
+        setFiles02(undefined)
+      }, 0)
     }
-  }, [drawing02?.data?.files, loadFiles])
+  }, [drawing02?.data?.files])
 
   // Helper to compute initial data for a specific drawing
   const computeInitialData = useCallback(
@@ -732,13 +402,24 @@ export default function Canvas() {
   )
 
   // Keep theme state in sync when a drawing loads or changes
+  // Using useMemo to derive theme instead of setState in effect
+  const computedTheme01 = useMemo(
+    () => getDrawingTheme(drawing01?.data),
+    [drawing01?.data, getDrawingTheme]
+  )
+  const computedTheme02 = useMemo(
+    () => getDrawingTheme(drawing02?.data),
+    [drawing02?.data, getDrawingTheme]
+  )
+
+  // Sync computed themes to state when they change
   useEffect(() => {
-    setDrawingTheme01(getDrawingTheme(drawing01?.data))
-  }, [drawing01?.data, getDrawingTheme])
+    setDrawingTheme01(computedTheme01)
+  }, [computedTheme01])
 
   useEffect(() => {
-    setDrawingTheme02(getDrawingTheme(drawing02?.data))
-  }, [drawing02?.data, getDrawingTheme])
+    setDrawingTheme02(computedTheme02)
+  }, [computedTheme02])
 
   return (
     <div className="h-full w-full relative">
