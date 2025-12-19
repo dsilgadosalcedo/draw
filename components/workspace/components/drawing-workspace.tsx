@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic"
 import { DrawingProvider } from "../../../context/drawing-context"
 import Sidebar from "../../sidebar/components/sidebar"
-import Connecting from "../../connecting"
+import Connecting from "@/components/connecting-loader"
 import { useDrawingInitialization } from "../hooks/use-drawing-initialization"
 
 // Dynamically import the Canvas component and disable SSR
