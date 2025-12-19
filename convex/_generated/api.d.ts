@@ -12,6 +12,7 @@ import type * as auth from "../auth.js";
 import type * as drawings from "../drawings.js";
 import type * as folders from "../folders.js";
 import type * as http from "../http.js";
+import type * as validators_excalidraw_validators from "../validators/excalidraw_validators.js";
 
 import type {
   ApiFromModules,
@@ -24,6 +25,7 @@ declare const fullApi: ApiFromModules<{
   drawings: typeof drawings;
   folders: typeof folders;
   http: typeof http;
+  "validators/excalidraw_validators": typeof validators_excalidraw_validators;
 }>;
 
 /**

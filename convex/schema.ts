@@ -4,7 +4,7 @@ import { authTables } from "@convex-dev/auth/server"
 import {
   excalidrawElement,
   excalidrawAppState
-} from "./validators/excalidraw-validators"
+} from "./validators/excalidraw_validators"
 
 // The schema is normally optional, but Convex Auth
 // requires indexes defined on `authTables`.

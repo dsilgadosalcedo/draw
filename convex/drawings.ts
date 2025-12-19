@@ -15,7 +15,7 @@ import {
   excalidrawElement,
   excalidrawAppState,
   binaryFiles
-} from "./validators/excalidraw-validators"
+} from "./validators/excalidraw_validators"
 
 // Type for Excalidraw file data (can be Blob, dataURL, or mimeType+data)
 type ExcalidrawFileData =
