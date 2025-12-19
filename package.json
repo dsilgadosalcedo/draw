@@ -35,7 +35,7 @@
     "test:watch": "bun test --watch",
     "test:coverage": "bun test --coverage",
     "test:e2e": "playwright test e2e-playwright",
-    "analyze": "ANALYZE=true bun run --bun next build",
+    "analyze": "bun run build && bunx next experimental-analyze",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
@@ -62,7 +62,6 @@
     "@commitlint/cli": "^19.0.0",
     "@commitlint/config-conventional": "^19.0.0",
     "@convex-dev/eslint-plugin": "^1.1.1",
-    "@next/bundle-analyzer": "^16.1.0",
     "@playwright/test": "^1.48.0",
     "@tailwindcss/postcss": "^4.1.18",
     "@testing-library/jest-dom": "^6.6.3",
