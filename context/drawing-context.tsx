@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, ReactNode } from "react"
+import { createContext, use, useState, ReactNode } from "react"
 
 interface DrawingContextType {
   currentDrawingId: string | null
@@ -20,7 +20,7 @@ export const DrawingProvider = ({ children }: { children: ReactNode }) => {
 }
 
 export const useDrawing = () => {
-  const context = useContext(DrawingContext)
+  const context = use(DrawingContext)
   if (context === undefined) {
     throw new Error("useDrawing must be used within a DrawingProvider")
   }

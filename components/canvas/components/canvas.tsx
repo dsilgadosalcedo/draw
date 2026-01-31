@@ -54,8 +54,6 @@ export default function Canvas() {
   const [fadingOutBox02, setFadingOutBox02] = useState(false)
   const [fadingOutBox01, setFadingOutBox01] = useState(false)
   const [initialFadeInBox01, setInitialFadeInBox01] = useState(false)
-  const [drawingTheme01, setDrawingTheme01] = useState<"light" | "dark">("dark")
-  const [drawingTheme02, setDrawingTheme02] = useState<"light" | "dark">("dark")
 
   // Refs to track current box states without causing effect re-runs
   const drawing01Ref = useRef(drawing01)
@@ -86,7 +84,7 @@ export default function Canvas() {
   // Note: We intentionally set state synchronously here to ensure the new drawing
   // is rendered behind (z-10) before starting the fade animation on the old drawing.
   // This is necessary for the crossfade transition to work correctly.
-  // The linter warning about setState in effects is expected and acceptable here.
+  /* eslint-disable react-hooks/set-state-in-effect -- crossfade transition requires sync state updates in effect */
   useEffect(() => {
     // Only proceed if drawing is loaded (not undefined) and we have a drawingId
     if (drawing === undefined || !drawingId) {
@@ -241,6 +239,7 @@ export default function Canvas() {
     },
     1000
   )
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Flush pending saves when drawing changes
   useEffect(() => {
@@ -261,9 +260,6 @@ export default function Canvas() {
     ) => {
       if (drawing01?.drawingId) {
         handleSave(elements, appState, files, drawing01.drawingId)
-        if (appState.theme) {
-          setDrawingTheme01(appState.theme === "light" ? "light" : "dark")
-        }
       }
     },
     [drawing01, handleSave]
@@ -277,9 +273,6 @@ export default function Canvas() {
     ) => {
       if (drawing02?.drawingId) {
         handleSave(elements, appState, files, drawing02.drawingId)
-        if (appState.theme) {
-          setDrawingTheme02(appState.theme === "light" ? "light" : "dark")
-        }
       }
     },
     [drawing02, handleSave]
@@ -419,8 +412,7 @@ export default function Canvas() {
     []
   )
 
-  // Keep theme state in sync when a drawing loads or changes
-  // Using useMemo to derive theme instead of setState in effect
+  // Derive theme from drawing data during render (no state + effect)
   const computedTheme01 = useMemo(
     () => getDrawingTheme(drawing01?.data),
     [drawing01?.data, getDrawingTheme]
@@ -429,15 +421,6 @@ export default function Canvas() {
     () => getDrawingTheme(drawing02?.data),
     [drawing02?.data, getDrawingTheme]
   )
-
-  // Sync computed themes to state when they change
-  useEffect(() => {
-    setDrawingTheme01(computedTheme01)
-  }, [computedTheme01])
-
-  useEffect(() => {
-    setDrawingTheme02(computedTheme02)
-  }, [computedTheme02])
 
   return (
     <ErrorBoundary>
@@ -460,7 +443,7 @@ export default function Canvas() {
               key={`${drawing01.drawingId ?? "drawing-01"}-${drawing01.data?.name ?? "unnamed"}`}
               drawingId={drawing01.drawingId}
               name={drawing01.data?.name}
-              theme={drawingTheme01}
+              theme={computedTheme01}
             />
             <ErrorBoundary
               fallback={
@@ -496,7 +479,7 @@ export default function Canvas() {
               key={`${drawing02.drawingId ?? "drawing-02"}-${drawing02.data?.name ?? "unnamed"}`}
               drawingId={drawing02.drawingId}
               name={drawing02.data?.name}
-              theme={drawingTheme02}
+              theme={computedTheme02}
             />
             <ErrorBoundary
               fallback={
