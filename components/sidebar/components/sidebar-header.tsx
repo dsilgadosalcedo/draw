@@ -3,30 +3,24 @@ import { Button } from "@/components/ui/button"
 import { sidebarIcons } from "../constants/sidebar-constants"
 
 type SidebarHeaderProps = {
-  onCollapse: () => void
   onNewDrawing: () => void
   onOpenSearch: () => void
 }
 
 export function SidebarHeader({
-  onCollapse,
   onNewDrawing,
   onOpenSearch
 }: SidebarHeaderProps) {
   return (
     <header className="flex flex-col items-center gap-2 pt-5 pb-2">
-      <div className="flex items-center gap-2 justify-between w-full px-2">
-        <Button variant="ghost" size="icon">
-          <sidebarIcons.LineSquiggleIcon className="size-5" />
-        </Button>
+      <div className="flex items-center gap-2 w-full px-2">
         <Button
-          onClick={onCollapse}
           variant="ghost"
           size="icon"
-          title="Collapse sidebar"
-          aria-label="Collapse sidebar"
+          title="App logo"
+          aria-label="App logo"
         >
-          <sidebarIcons.PanelLeftIcon />
+          <sidebarIcons.LineSquiggleIcon className="size-5" />
         </Button>
       </div>
 

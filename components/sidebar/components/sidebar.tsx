@@ -291,9 +291,9 @@ export default function Sidebar() {
         isOpen={isOpen}
         drawingTheme={drawingTheme}
         onOpen={() => setIsOpen(true)}
+        onClose={() => setIsOpen(false)}
       >
         <SidebarHeader
-          onCollapse={() => setIsOpen(false)}
           onNewDrawing={createNewDrawing}
           onOpenSearch={() => setSearchDialogOpen(true)}
         />
