@@ -48,3 +48,5 @@ next-env.d.ts
 
 # convex
 .convex/debug.log
+# next-agents-md
+.next-docs/
