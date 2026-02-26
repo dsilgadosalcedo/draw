@@ -31,10 +31,6 @@ export default function Sidebar() {
     | SidebarDrawing[]
     | undefined
   const folders = useQuery(api.folders.list) as SidebarFolder[] | undefined
-  const currentDrawing = useQuery(
-    api.drawings.get,
-    currentDrawingId ? { drawingId: currentDrawingId } : "skip"
-  )
   const userStorage = useQuery(api.drawings.getUserStorage)
   const updateName = useMutation(api.drawings.updateName)
   const removeDrawing = useMutation(api.drawings.remove)
@@ -279,9 +275,7 @@ export default function Sidebar() {
     }
   }, [router, signOut])
 
-  const drawingTheme =
-    (currentDrawing?.appState as { theme?: "light" | "dark" } | undefined)
-      ?.theme ?? "dark"
+  const drawingTheme: "light" | "dark" = "dark"
 
   if (!allDrawings) return null
 

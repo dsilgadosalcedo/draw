@@ -7,15 +7,22 @@ import { useDrawing } from "../../../context/drawing-context"
 
 export function useDrawingInitialization() {
   const { currentDrawingId, setCurrentDrawingId } = useDrawing()
-  const latestDrawingId = useQuery(api.drawings.getLatest)
-  const allDrawings = useQuery(api.drawings.list, {})
+  const shouldInitialize = !currentDrawingId
+  const latestDrawingId = useQuery(
+    api.drawings.getLatest,
+    shouldInitialize ? {} : "skip"
+  )
+  const allDrawings = useQuery(
+    api.drawings.list,
+    shouldInitialize ? {} : "skip"
+  )
 
   useEffect(() => {
     // Only initialize if we have data and no current drawing ID
     if (
+      shouldInitialize &&
       latestDrawingId !== undefined &&
-      allDrawings !== undefined &&
-      !currentDrawingId
+      allDrawings !== undefined
     ) {
       // If there are drawings but all are in folders, start a new uncategorized drawing
       const hasUncategorized = allDrawings.some((d) => !d.folderId)
@@ -33,5 +40,5 @@ export function useDrawingInitialization() {
         setCurrentDrawingId(crypto.randomUUID())
       }
     }
-  }, [latestDrawingId, allDrawings, currentDrawingId, setCurrentDrawingId])
+  }, [allDrawings, latestDrawingId, setCurrentDrawingId, shouldInitialize])
 }
