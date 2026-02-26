@@ -27,14 +27,6 @@ export default function Canvas() {
   const saveDrawing = useAction(api.drawings.saveWithFiles)
   // Track the current drawing ID to detect drawing changes
   const lastDrawingIdRef = useRef<string | null>(null)
-  // Track the last loaded drawing data to show while new drawing loads
-  const lastDrawingDataRef = useRef<{
-    drawingId: string | null
-    data: DrawingData
-  }>({
-    drawingId: null,
-    data: null
-  })
 
   // State for dual Excalidraw instances with crossfade
   const [drawing01, setDrawing01] = useState<{
@@ -73,12 +65,34 @@ export default function Canvas() {
   // Query drawing data if we have an ID
   const drawing = useQuery(api.drawings.get, drawingId ? { drawingId } : "skip")
 
-  // Update last loaded drawing data when drawing loads for the current drawingId
-  useEffect(() => {
-    if (drawing !== undefined && drawingId) {
-      lastDrawingDataRef.current = { drawingId, data: drawing }
-    }
-  }, [drawing, drawingId])
+  const getThemeFromDrawingData = useCallback((data: DrawingData) => {
+    const theme = (data?.appState as { theme?: "light" | "dark" } | undefined)
+      ?.theme
+    return theme === "light" ? "light" : "dark"
+  }, [])
+
+  const getFilesSignature = useCallback((data: DrawingData): string => {
+    if (!data?.files) return ""
+    return Object.keys(data.files).sort().join("|")
+  }, [])
+
+  const shouldSyncExistingDrawingData = useCallback(
+    (currentData: DrawingData, incomingData: DrawingData): boolean => {
+      if (!currentData || !incomingData) return false
+      if (currentData.name !== incomingData.name) return true
+      if (
+        getThemeFromDrawingData(currentData) !==
+        getThemeFromDrawingData(incomingData)
+      ) {
+        return true
+      }
+      if (getFilesSignature(currentData) !== getFilesSignature(incomingData)) {
+        return true
+      }
+      return false
+    },
+    [getFilesSignature, getThemeFromDrawingData]
+  )
 
   // Handle drawing transitions with crossfade animation
   // Note: We intentionally set state synchronously here to ensure the new drawing
@@ -96,14 +110,28 @@ export default function Canvas() {
     const existingIn01 = drawing01Ref.current?.drawingId === drawingId
     const existingIn02 = drawing02Ref.current?.drawingId === drawingId
 
-    // If drawing exists in a box, update it with new data (e.g., when name changes from undefined to "Drawing")
+    // Avoid re-injecting full server payloads on every autosave refresh. Sync only lightweight metadata.
     if (existingIn01) {
-      setDrawing01({ drawingId, data: drawing })
+      if (
+        shouldSyncExistingDrawingData(
+          drawing01Ref.current?.data ?? null,
+          drawing
+        )
+      ) {
+        setDrawing01({ drawingId, data: drawing })
+      }
       return
     }
 
     if (existingIn02) {
-      setDrawing02({ drawingId, data: drawing })
+      if (
+        shouldSyncExistingDrawingData(
+          drawing02Ref.current?.data ?? null,
+          drawing
+        )
+      ) {
+        setDrawing02({ drawingId, data: drawing })
+      }
       return
     }
 
@@ -213,7 +241,7 @@ export default function Canvas() {
     // to prevent the effect from re-running when we update them, which would
     // cancel the fade timeout before it can complete.
     // We use refs (drawing01Ref, drawing02Ref) to access current values instead.
-  }, [drawing, drawingId])
+  }, [drawing, drawingId, shouldSyncExistingDrawingData])
 
   // Debounced handler that performs the save mutation
   const { debouncedCall: handleSave, flush: flushSave } = useDebouncedCallback(
@@ -237,7 +265,7 @@ export default function Canvas() {
         })
       }
     },
-    1000
+    2000
   )
   /* eslint-enable react-hooks/set-state-in-effect */
 

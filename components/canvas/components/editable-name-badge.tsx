@@ -130,6 +130,15 @@ export function EditableNameBadge({
         type="text"
         value={draft || ""}
         placeholder={!draft ? "Untitled" : ""}
+        onPointerDown={(event) => {
+          // Prevent canvas-level handlers from interfering with text selection.
+          event.stopPropagation()
+        }}
+        onDoubleClick={(event) => {
+          event.stopPropagation()
+          event.currentTarget.focus()
+          event.currentTarget.select()
+        }}
         onBlur={handleBlur}
         onChange={(event) => {
           const nextValue = event.target.value
@@ -142,7 +151,7 @@ export function EditableNameBadge({
         className={cn(
           "w-full min-w-[140px] bg-transparent border-none p-0 m-0 text-md font-medium",
           "outline-none focus:outline-none focus:ring-0 focus:border-none",
-          "shadow-none rounded-none caret-inherit selection:bg-transparent",
+          "shadow-none rounded-none caret-inherit selection:bg-primary/30",
           "placeholder:text-muted-foreground",
           "disabled:opacity-80 disabled:cursor-not-allowed",
           themeClass
