@@ -25,7 +25,6 @@ const Excalidraw = dynamic(
 export default function Canvas() {
   const { currentDrawingId: drawingId } = useDrawing()
   const saveDrawing = useAction(api.drawings.saveWithFiles)
-  const [queryDrawingId, setQueryDrawingId] = useState<string | null>(null)
   // Track the current drawing ID to detect drawing changes
   const lastDrawingIdRef = useRef<string | null>(null)
 
@@ -63,33 +62,8 @@ export default function Canvas() {
     drawing02Ref.current = drawing02
   }, [drawing02])
 
-  // Query drawing data only when switching drawings.
-  // After the initial payload arrives, we unsubscribe to avoid autosave echo rerenders.
-  const drawing = useQuery(
-    api.drawings.get,
-    queryDrawingId ? { drawingId: queryDrawingId } : "skip"
-  )
-
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      setQueryDrawingId(drawingId ?? null)
-    }, 0)
-    return () => clearTimeout(timeoutId)
-  }, [drawingId])
-
-  useEffect(() => {
-    if (
-      queryDrawingId &&
-      drawingId &&
-      queryDrawingId === drawingId &&
-      drawing !== undefined
-    ) {
-      const timeoutId = setTimeout(() => {
-        setQueryDrawingId(null)
-      }, 0)
-      return () => clearTimeout(timeoutId)
-    }
-  }, [drawing, drawingId, queryDrawingId])
+  // Query drawing data if we have an ID
+  const drawing = useQuery(api.drawings.get, drawingId ? { drawingId } : "skip")
 
   const getThemeFromDrawingData = useCallback((data: DrawingData) => {
     const theme = (data?.appState as { theme?: "light" | "dark" } | undefined)
