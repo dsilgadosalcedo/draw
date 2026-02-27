@@ -25,12 +25,31 @@ describe("useDebouncedCallback", () => {
     const appState = {} as AppState
     const files = {} as BinaryFiles
     const drawingId = "test-id"
+    const revision = 1
 
     // Call multiple times rapidly
     act(() => {
-      result.current.debouncedCall(elements, appState, files, drawingId)
-      result.current.debouncedCall(elements, appState, files, drawingId)
-      result.current.debouncedCall(elements, appState, files, drawingId)
+      result.current.debouncedCall(
+        elements,
+        appState,
+        files,
+        drawingId,
+        revision
+      )
+      result.current.debouncedCall(
+        elements,
+        appState,
+        files,
+        drawingId,
+        revision
+      )
+      result.current.debouncedCall(
+        elements,
+        appState,
+        files,
+        drawingId,
+        revision
+      )
     })
 
     // Callback should not be called immediately
@@ -46,7 +65,13 @@ describe("useDebouncedCallback", () => {
 
     // Callback should be called once after debounce
     expect(callback).toHaveBeenCalledTimes(1)
-    expect(callback).toHaveBeenCalledWith(elements, appState, files, drawingId)
+    expect(callback).toHaveBeenCalledWith(
+      elements,
+      appState,
+      files,
+      drawingId,
+      revision
+    )
   })
 
   it("should flush pending calls immediately", () => {
@@ -57,9 +82,16 @@ describe("useDebouncedCallback", () => {
     const appState = {} as AppState
     const files = {} as BinaryFiles
     const drawingId = "test-id"
+    const revision = 2
 
     act(() => {
-      result.current.debouncedCall(elements, appState, files, drawingId)
+      result.current.debouncedCall(
+        elements,
+        appState,
+        files,
+        drawingId,
+        revision
+      )
     })
 
     // Flush should call immediately
@@ -68,7 +100,13 @@ describe("useDebouncedCallback", () => {
     })
 
     expect(callback).toHaveBeenCalledTimes(1)
-    expect(callback).toHaveBeenCalledWith(elements, appState, files, drawingId)
+    expect(callback).toHaveBeenCalledWith(
+      elements,
+      appState,
+      files,
+      drawingId,
+      revision
+    )
   })
 
   it("should cleanup on unmount", async () => {
@@ -81,9 +119,16 @@ describe("useDebouncedCallback", () => {
     const appState = {} as AppState
     const files = {} as BinaryFiles
     const drawingId = "test-id"
+    const revision = 3
 
     act(() => {
-      result.current.debouncedCall(elements, appState, files, drawingId)
+      result.current.debouncedCall(
+        elements,
+        appState,
+        files,
+        drawingId,
+        revision
+      )
     })
 
     unmount()
@@ -104,14 +149,28 @@ describe("useDebouncedCallback", () => {
     const appState = {} as AppState
     const files = {} as BinaryFiles
     const drawingId = "test-id"
+    const firstRevision = 4
+    const secondRevision = 5
 
     act(() => {
-      result.current.debouncedCall(elements1, appState, files, drawingId)
+      result.current.debouncedCall(
+        elements1,
+        appState,
+        files,
+        drawingId,
+        firstRevision
+      )
     })
 
     // Call again with different values before timeout
     act(() => {
-      result.current.debouncedCall(elements2, appState, files, drawingId)
+      result.current.debouncedCall(
+        elements2,
+        appState,
+        files,
+        drawingId,
+        secondRevision
+      )
     })
 
     await waitFor(
@@ -123,6 +182,12 @@ describe("useDebouncedCallback", () => {
 
     // Should use latest values
     expect(callback).toHaveBeenCalledTimes(1)
-    expect(callback).toHaveBeenCalledWith(elements2, appState, files, drawingId)
+    expect(callback).toHaveBeenCalledWith(
+      elements2,
+      appState,
+      files,
+      drawingId,
+      secondRevision
+    )
   })
 })

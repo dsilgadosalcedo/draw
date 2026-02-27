@@ -7,7 +7,8 @@ export function useDebouncedCallback(
     elements: readonly OrderedExcalidrawElement[],
     appState: AppState,
     files: BinaryFiles,
-    drawingId: string | null
+    drawingId: string | null,
+    revision: number
   ) => void,
   delay: number = 500
 ) {
@@ -18,6 +19,7 @@ export function useDebouncedCallback(
   const pendingAppStateRef = useRef<AppState | null>(null)
   const pendingFilesRef = useRef<BinaryFiles | null>(null)
   const pendingDrawingIdRef = useRef<string | null>(null)
+  const pendingRevisionRef = useRef<number>(0)
 
   useEffect(() => {
     return () => {
@@ -32,13 +34,15 @@ export function useDebouncedCallback(
       elements: readonly OrderedExcalidrawElement[],
       appState: AppState,
       files: BinaryFiles,
-      drawingId: string | null
+      drawingId: string | null,
+      revision: number
     ) => {
       // Store the latest values along with the drawingId
       pendingElementsRef.current = elements
       pendingAppStateRef.current = appState
       pendingFilesRef.current = files
       pendingDrawingIdRef.current = drawingId
+      pendingRevisionRef.current = revision
 
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
@@ -54,12 +58,14 @@ export function useDebouncedCallback(
             pendingElementsRef.current,
             pendingAppStateRef.current,
             pendingFilesRef.current,
-            pendingDrawingIdRef.current
+            pendingDrawingIdRef.current,
+            pendingRevisionRef.current
           )
           pendingElementsRef.current = null
           pendingAppStateRef.current = null
           pendingFilesRef.current = null
           pendingDrawingIdRef.current = null
+          pendingRevisionRef.current = 0
         }
       }, delay)
     },
@@ -81,12 +87,14 @@ export function useDebouncedCallback(
         pendingElementsRef.current,
         pendingAppStateRef.current,
         pendingFilesRef.current,
-        pendingDrawingIdRef.current
+        pendingDrawingIdRef.current,
+        pendingRevisionRef.current
       )
       pendingElementsRef.current = null
       pendingAppStateRef.current = null
       pendingFilesRef.current = null
       pendingDrawingIdRef.current = null
+      pendingRevisionRef.current = 0
     }
   }, [callback])
 

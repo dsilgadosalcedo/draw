@@ -13,6 +13,12 @@ import { type DrawingData } from "../types"
 import { serializeAppState, deserializeAppState } from "../utils/serialization"
 import { useDebouncedCallback } from "../hooks/use-debounced-callback"
 import { loadFiles } from "../utils/file-loader"
+import {
+  getLocalDraft,
+  saveLocalDraft,
+  markLocalDraftSynced,
+  pruneOldLocalDrafts
+} from "../utils/local-draft-store"
 import { EditableNameBadge } from "./editable-name-badge"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { reportError, getConvexErrorMessage } from "@/lib/error-handling"
@@ -52,6 +58,12 @@ export default function Canvas() {
   const drawing02Ref = useRef(drawing02)
   // Ref to track the current fade timeout so we can cancel it if a new transition starts
   const fadeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const draftRevisionByDrawingRef = useRef<Map<string, number>>(new Map())
+  const latestSnapshotRef = useRef<{
+    drawingId: string
+    elements: readonly OrderedExcalidrawElement[]
+    appState: AppState
+  } | null>(null)
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -94,6 +106,75 @@ export default function Canvas() {
     [getFilesSignature, getThemeFromDrawingData]
   )
 
+  const persistLocalDraftSnapshot = useCallback(
+    (
+      idToSave: string,
+      elements: readonly OrderedExcalidrawElement[],
+      appState: AppState,
+      revision: number,
+      dirty: boolean
+    ) => {
+      const serializedAppState = serializeAppState(appState)
+      saveLocalDraft({
+        drawingId: idToSave,
+        elements,
+        appState: serializedAppState,
+        revision,
+        dirty
+      })
+    },
+    []
+  )
+
+  const nextRevisionForDrawing = useCallback((idToSave: string): number => {
+    const existingRevision = draftRevisionByDrawingRef.current.get(idToSave)
+    if (existingRevision !== undefined) {
+      const nextRevision = existingRevision + 1
+      draftRevisionByDrawingRef.current.set(idToSave, nextRevision)
+      return nextRevision
+    }
+
+    const currentDraftRevision = getLocalDraft(idToSave)?.revision ?? 0
+    const nextRevision = currentDraftRevision + 1
+    draftRevisionByDrawingRef.current.set(idToSave, nextRevision)
+    return nextRevision
+  }, [])
+
+  const applyLocalDraftRecovery = useCallback(
+    (idToRecover: string, serverDrawing: DrawingData): DrawingData => {
+      const localDraft = getLocalDraft(idToRecover)
+      if (!localDraft) {
+        return serverDrawing
+      }
+
+      const shouldRecover = localDraft.dirty || !serverDrawing
+      if (!shouldRecover) {
+        return serverDrawing
+      }
+
+      draftRevisionByDrawingRef.current.set(idToRecover, localDraft.revision)
+
+      if (serverDrawing) {
+        return {
+          ...serverDrawing,
+          elements: localDraft.elements,
+          appState: localDraft.appState ?? null
+        }
+      }
+
+      return {
+        _id: `local-${idToRecover}`,
+        _creationTime: localDraft.lastUpdatedAt,
+        userId: "",
+        drawingId: idToRecover,
+        name: "Drawing",
+        elements: localDraft.elements,
+        appState: localDraft.appState ?? null
+      }
+    },
+    []
+  )
+
   // Handle drawing transitions with crossfade animation
   // Note: We intentionally set state synchronously here to ensure the new drawing
   // is rendered behind (z-10) before starting the fade animation on the old drawing.
@@ -109,16 +190,17 @@ export default function Canvas() {
     // Use refs to get current values without triggering effect re-runs
     const existingIn01 = drawing01Ref.current?.drawingId === drawingId
     const existingIn02 = drawing02Ref.current?.drawingId === drawingId
+    const drawingWithRecovery = applyLocalDraftRecovery(drawingId, drawing)
 
     // Avoid re-injecting full server payloads on every autosave refresh. Sync only lightweight metadata.
     if (existingIn01) {
       if (
         shouldSyncExistingDrawingData(
           drawing01Ref.current?.data ?? null,
-          drawing
+          drawingWithRecovery
         )
       ) {
-        setDrawing01({ drawingId, data: drawing })
+        setDrawing01({ drawingId, data: drawingWithRecovery })
       }
       return
     }
@@ -127,15 +209,15 @@ export default function Canvas() {
       if (
         shouldSyncExistingDrawingData(
           drawing02Ref.current?.data ?? null,
-          drawing
+          drawingWithRecovery
         )
       ) {
-        setDrawing02({ drawingId, data: drawing })
+        setDrawing02({ drawingId, data: drawingWithRecovery })
       }
       return
     }
 
-    const newDrawingData = { drawingId, data: drawing }
+    const newDrawingData = { drawingId, data: drawingWithRecovery }
 
     // Cancel any pending fade timeout from a previous transition
     // This prevents race conditions when switching quickly
@@ -241,7 +323,12 @@ export default function Canvas() {
     // to prevent the effect from re-running when we update them, which would
     // cancel the fade timeout before it can complete.
     // We use refs (drawing01Ref, drawing02Ref) to access current values instead.
-  }, [drawing, drawingId, shouldSyncExistingDrawingData])
+  }, [
+    applyLocalDraftRecovery,
+    drawing,
+    drawingId,
+    shouldSyncExistingDrawingData
+  ])
 
   // Debounced handler that performs the save mutation
   const { debouncedCall: handleSave, flush: flushSave } = useDebouncedCallback(
@@ -249,7 +336,8 @@ export default function Canvas() {
       elements: readonly OrderedExcalidrawElement[],
       appState: AppState,
       files: BinaryFiles,
-      idToSave: string | null
+      idToSave: string | null,
+      revision: number
     ) => {
       if (idToSave) {
         const serializedAppState = serializeAppState(appState)
@@ -258,11 +346,15 @@ export default function Canvas() {
           elements,
           appState: serializedAppState,
           files
-        }).catch((err) => {
-          const errorMessage = getConvexErrorMessage(err)
-          reportError(err)
-          console.error("Failed to auto-save drawing:", errorMessage)
         })
+          .then(() => {
+            markLocalDraftSynced(idToSave, revision)
+          })
+          .catch((err) => {
+            const errorMessage = getConvexErrorMessage(err)
+            reportError(err)
+            console.error("Failed to auto-save drawing:", errorMessage)
+          })
       }
     },
     2000
@@ -279,6 +371,47 @@ export default function Canvas() {
     lastDrawingIdRef.current = drawingId
   }, [drawingId, flushSave])
 
+  useEffect(() => {
+    pruneOldLocalDrafts()
+  }, [])
+
+  useEffect(() => {
+    const flushPendingWork = () => {
+      flushSave()
+
+      const latestSnapshot = latestSnapshotRef.current
+      if (!latestSnapshot) {
+        return
+      }
+
+      const revision =
+        draftRevisionByDrawingRef.current.get(latestSnapshot.drawingId) ?? 0
+      persistLocalDraftSnapshot(
+        latestSnapshot.drawingId,
+        latestSnapshot.elements,
+        latestSnapshot.appState,
+        revision,
+        true
+      )
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        flushPendingWork()
+      }
+    }
+
+    window.addEventListener("pagehide", flushPendingWork)
+    window.addEventListener("beforeunload", flushPendingWork)
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener("pagehide", flushPendingWork)
+      window.removeEventListener("beforeunload", flushPendingWork)
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+    }
+  }, [flushSave, persistLocalDraftSnapshot])
+
   // Create change handlers for each box that capture the correct drawingId
   const handleChange01 = useCallback(
     (
@@ -287,10 +420,23 @@ export default function Canvas() {
       files: BinaryFiles
     ) => {
       if (drawing01?.drawingId) {
-        handleSave(elements, appState, files, drawing01.drawingId)
+        latestSnapshotRef.current = {
+          drawingId: drawing01.drawingId,
+          elements,
+          appState
+        }
+        const revision = nextRevisionForDrawing(drawing01.drawingId)
+        persistLocalDraftSnapshot(
+          drawing01.drawingId,
+          elements,
+          appState,
+          revision,
+          true
+        )
+        handleSave(elements, appState, files, drawing01.drawingId, revision)
       }
     },
-    [drawing01, handleSave]
+    [drawing01, handleSave, nextRevisionForDrawing, persistLocalDraftSnapshot]
   )
 
   const handleChange02 = useCallback(
@@ -300,10 +446,23 @@ export default function Canvas() {
       files: BinaryFiles
     ) => {
       if (drawing02?.drawingId) {
-        handleSave(elements, appState, files, drawing02.drawingId)
+        latestSnapshotRef.current = {
+          drawingId: drawing02.drawingId,
+          elements,
+          appState
+        }
+        const revision = nextRevisionForDrawing(drawing02.drawingId)
+        persistLocalDraftSnapshot(
+          drawing02.drawingId,
+          elements,
+          appState,
+          revision,
+          true
+        )
+        handleSave(elements, appState, files, drawing02.drawingId, revision)
       }
     },
-    [drawing02, handleSave]
+    [drawing02, handleSave, nextRevisionForDrawing, persistLocalDraftSnapshot]
   )
 
   // State to store loaded files for each drawing
