@@ -33,6 +33,9 @@ export default function Canvas() {
   const saveDrawing = useAction(api.drawings.saveWithFiles)
   // Track the current drawing ID to detect drawing changes
   const lastDrawingIdRef = useRef<string | null>(null)
+  const syncedFilesSignatureByDrawingRef = useRef<Map<string, string>>(
+    new Map()
+  )
 
   // State for dual Excalidraw instances with crossfade
   const [drawing01, setDrawing01] = useState<{
@@ -87,6 +90,47 @@ export default function Canvas() {
     if (!data?.files) return ""
     return Object.keys(data.files).sort().join("|")
   }, [])
+
+  const getBinaryFilesSignature = useCallback(
+    (files: BinaryFiles | null | undefined): string | null => {
+      if (!files) return null
+
+      const entries = Object.entries(files)
+      if (entries.length === 0) return ""
+
+      return entries
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([fileId, file]) => {
+          const dataURL = file.dataURL ?? ""
+          return [
+            fileId,
+            file.mimeType,
+            file.version ?? 0,
+            dataURL.length,
+            dataURL.slice(0, 24),
+            dataURL.slice(-24)
+          ].join(":")
+        })
+        .join("|")
+    },
+    []
+  )
+
+  const syncFilesSignatureForDrawing = useCallback(
+    (drawingIdToSync: string, files: BinaryFiles | null | undefined) => {
+      const filesSignature = getBinaryFilesSignature(files)
+      if (filesSignature) {
+        syncedFilesSignatureByDrawingRef.current.set(
+          drawingIdToSync,
+          filesSignature
+        )
+        return
+      }
+
+      syncedFilesSignatureByDrawingRef.current.delete(drawingIdToSync)
+    },
+    [getBinaryFilesSignature]
+  )
 
   const shouldSyncExistingDrawingData = useCallback(
     (currentData: DrawingData, incomingData: DrawingData): boolean => {
@@ -341,13 +385,30 @@ export default function Canvas() {
     ) => {
       if (idToSave) {
         const serializedAppState = serializeAppState(appState)
+        const appStatePayload = serializedAppState ?? null
+        const filesSignature = getBinaryFilesSignature(files)
+        const lastSyncedFilesSignature =
+          syncedFilesSignatureByDrawingRef.current.get(idToSave)
+        const shouldSendFiles =
+          filesSignature !== null && filesSignature !== lastSyncedFilesSignature
+
         void saveDrawing({
           drawingId: idToSave,
-          elements,
-          appState: serializedAppState,
-          files
+          elements: [...elements],
+          appState: appStatePayload,
+          ...(shouldSendFiles ? { files } : {})
         })
           .then(() => {
+            if (shouldSendFiles) {
+              if (filesSignature === "") {
+                syncedFilesSignatureByDrawingRef.current.delete(idToSave)
+              } else if (filesSignature !== null) {
+                syncedFilesSignatureByDrawingRef.current.set(
+                  idToSave,
+                  filesSignature
+                )
+              }
+            }
             markLocalDraftSynced(idToSave, revision)
           })
           .catch((err) => {
@@ -357,7 +418,7 @@ export default function Canvas() {
           })
       }
     },
-    2000
+    2500
   )
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -468,47 +529,107 @@ export default function Canvas() {
   // State to store loaded files for each drawing
   const [files01, setFiles01] = useState<BinaryFiles | undefined>(undefined)
   const [files02, setFiles02] = useState<BinaryFiles | undefined>(undefined)
+  const files01DrawingIdRef = useRef<string | null>(null)
+  const files02DrawingIdRef = useRef<string | null>(null)
 
   // Load files when drawing data changes
   useEffect(() => {
+    const drawing01Id = drawing01?.drawingId ?? null
+    if (!drawing01Id) {
+      files01DrawingIdRef.current = null
+      setTimeout(() => {
+        setFiles01(undefined)
+      }, 0)
+      return
+    }
+
     if (drawing01?.data?.files) {
       loadFiles(drawing01.data.files)
         .then((files) => {
+          if (drawing01Ref.current?.drawingId !== drawing01Id) {
+            return
+          }
+          files01DrawingIdRef.current = drawing01Id
           setFiles01(files)
         })
         .catch((err) => {
+          if (drawing01Ref.current?.drawingId !== drawing01Id) {
+            return
+          }
+          files01DrawingIdRef.current = drawing01Id
           reportError(err)
           console.error("Failed to load files for drawing 01:", err)
           // Set empty files on error to allow drawing to render
           setFiles01({})
         })
     } else {
+      files01DrawingIdRef.current = drawing01Id
       // Use setTimeout to avoid synchronous setState in effect
       setTimeout(() => {
-        setFiles01(undefined)
+        if (drawing01Ref.current?.drawingId === drawing01Id) {
+          setFiles01(undefined)
+        }
       }, 0)
     }
   }, [drawing01?.data?.files, drawing01?.drawingId])
 
   useEffect(() => {
+    if (
+      drawing01?.drawingId &&
+      files01DrawingIdRef.current === drawing01.drawingId
+    ) {
+      syncFilesSignatureForDrawing(drawing01.drawingId, files01)
+    }
+  }, [drawing01?.drawingId, files01, syncFilesSignatureForDrawing])
+
+  useEffect(() => {
+    const drawing02Id = drawing02?.drawingId ?? null
+    if (!drawing02Id) {
+      files02DrawingIdRef.current = null
+      setTimeout(() => {
+        setFiles02(undefined)
+      }, 0)
+      return
+    }
+
     if (drawing02?.data?.files) {
       loadFiles(drawing02.data.files)
         .then((files) => {
+          if (drawing02Ref.current?.drawingId !== drawing02Id) {
+            return
+          }
+          files02DrawingIdRef.current = drawing02Id
           setFiles02(files)
         })
         .catch((err) => {
+          if (drawing02Ref.current?.drawingId !== drawing02Id) {
+            return
+          }
+          files02DrawingIdRef.current = drawing02Id
           reportError(err)
           console.error("Failed to load files for drawing 02:", err)
           // Set empty files on error to allow drawing to render
           setFiles02({})
         })
     } else {
+      files02DrawingIdRef.current = drawing02Id
       // Use setTimeout to avoid synchronous setState in effect
       setTimeout(() => {
-        setFiles02(undefined)
+        if (drawing02Ref.current?.drawingId === drawing02Id) {
+          setFiles02(undefined)
+        }
       }, 0)
     }
   }, [drawing02?.data?.files, drawing02?.drawingId])
+
+  useEffect(() => {
+    if (
+      drawing02?.drawingId &&
+      files02DrawingIdRef.current === drawing02.drawingId
+    ) {
+      syncFilesSignatureForDrawing(drawing02.drawingId, files02)
+    }
+  }, [drawing02?.drawingId, files02, syncFilesSignatureForDrawing])
 
   // Helper to compute initial data for a specific drawing
   const computeInitialData = useCallback(

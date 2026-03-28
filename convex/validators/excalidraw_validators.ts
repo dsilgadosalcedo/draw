@@ -1,20 +1,25 @@
 import { v } from "convex/values"
 
 /**
- * Validator for Excalidraw element structure
- * Excalidraw elements have a common structure with id, type, and other properties
+ * Validator for Excalidraw elements.
+ * Kept permissive for nested runtime-specific fields, but still enforces the
+ * outer array shape and preserves null for backwards compatibility.
  */
-export const excalidrawElement = v.any() // TODO: Define more specific structure when Excalidraw types are available
+export const excalidrawElement = v.union(v.null(), v.array(v.any()))
 
 /**
- * Validator for Excalidraw AppState
- * AppState contains view settings, theme, and other UI state
+ * Validator for serialized Excalidraw app state.
+ * We keep the top-level value map-shaped while allowing null for older data.
  */
-export const excalidrawAppState = v.any() // TODO: Define more specific structure when Excalidraw types are available
+export const excalidrawAppState = v.union(
+  v.null(),
+  v.record(v.string(), v.any())
+)
 
 /**
- * Validator for BinaryFiles from Excalidraw
- * BinaryFiles is a record mapping file IDs to file data
+ * Validator for BinaryFiles from Excalidraw.
+ * This accepts the common structured forms plus a permissive fallback for
+ * Blob-like payloads that Convex serializes differently.
  */
 export const binaryFiles = v.optional(
   v.record(
@@ -26,9 +31,9 @@ export const binaryFiles = v.optional(
       }),
       v.object({
         mimeType: v.string(),
-        data: v.union(v.string(), v.any()) // Uint8Array or string
+        data: v.union(v.string(), v.bytes())
       }),
-      v.any() // Blob or other formats
+      v.any()
     )
   )
 )

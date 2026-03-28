@@ -23,6 +23,10 @@ type ExcalidrawFileData =
   | { dataURL: string; mimeType?: string }
   | { mimeType: string; data: string | Uint8Array }
 
+const MAX_SAVE_FILE_COUNT = 250
+const MAX_SAVE_REQUEST_BYTES = 40 * 1024 * 1024
+const MAX_SAVE_SINGLE_FILE_BYTES = 20 * 1024 * 1024
+
 // Type guard to check if fileData has dataURL
 function hasDataURL(
   fileData: ExcalidrawFileData
@@ -120,6 +124,34 @@ function toBlob(fileData: ExcalidrawFileData): Blob | null {
   }
 }
 
+function estimateStructuredPayloadBytes(value: unknown): number {
+  try {
+    return new TextEncoder().encode(JSON.stringify(value)).byteLength
+  } catch {
+    return 0
+  }
+}
+
+function estimateFileBytes(fileData: ExcalidrawFileData): number {
+  if (fileData instanceof Blob) {
+    return fileData.size
+  }
+
+  if (hasDataURL(fileData)) {
+    return fileData.dataURL.length
+  }
+
+  if (hasMimeTypeAndData(fileData)) {
+    if (typeof fileData.data === "string") {
+      return fileData.data.length
+    }
+
+    return fileData.data.byteLength
+  }
+
+  return estimateStructuredPayloadBytes(fileData)
+}
+
 // Helper function to upload files and return storage IDs mapped by fileId
 async function uploadFiles(
   ctx: ActionCtx,
@@ -149,16 +181,16 @@ async function getFileUrls(
     return {}
   }
 
-  const files: Record<string, string> = {}
+  const files = await Promise.all(
+    Object.entries(fileMap).map(async ([fileId, storageId]) => {
+      const url = await ctx.storage.getUrl(storageId)
+      return url ? [fileId, url] : null
+    })
+  )
 
-  for (const [fileId, storageId] of Object.entries(fileMap)) {
-    const url = await ctx.storage.getUrl(storageId)
-    if (url) {
-      files[fileId] = url
-    }
-  }
-
-  return files
+  return Object.fromEntries(
+    files.filter((entry): entry is [string, string] => entry !== null)
+  )
 }
 
 type DrawingAccessRole = "owner" | "collaborator" | null
@@ -317,17 +349,47 @@ export const saveWithFiles = action({
     }
 
     const existing = access.drawing ?? null
+    const estimatedElementsBytes = estimateStructuredPayloadBytes(args.elements)
+    const estimatedAppStateBytes = estimateStructuredPayloadBytes(args.appState)
+    const estimatedBaseRequestBytes =
+      estimatedElementsBytes + estimatedAppStateBytes
+
+    if (estimatedBaseRequestBytes > MAX_SAVE_REQUEST_BYTES) {
+      throw new Error("Drawing save request is too large")
+    }
 
     let newFileMap: Record<string, Id<"_storage">> | undefined = undefined
     let bytesDelta = 0
 
     const providedFiles =
-      args.files &&
+      args.files !== undefined &&
+      args.files !== null &&
       typeof args.files === "object" &&
-      Object.keys(args.files).length > 0
+      !Array.isArray(args.files)
 
     if (providedFiles) {
       const incomingFiles = args.files as Record<string, ExcalidrawFileData>
+      const incomingFileEntries = Object.entries(incomingFiles)
+      if (incomingFileEntries.length > MAX_SAVE_FILE_COUNT) {
+        throw new Error("Too many files in drawing save request")
+      }
+
+      let estimatedIncomingFileBytes = 0
+      for (const [, fileData] of incomingFileEntries) {
+        const fileBytes = estimateFileBytes(fileData)
+        if (fileBytes > MAX_SAVE_SINGLE_FILE_BYTES) {
+          throw new Error("A drawing file is too large to upload")
+        }
+        estimatedIncomingFileBytes += fileBytes
+      }
+
+      const estimatedRequestBytes =
+        estimatedBaseRequestBytes + estimatedIncomingFileBytes
+
+      if (estimatedRequestBytes > MAX_SAVE_REQUEST_BYTES) {
+        throw new Error("Drawing save request is too large")
+      }
+
       const existingFiles = existing?.files ?? {}
       const mergedFileMap: Record<string, Id<"_storage">> = {}
 
@@ -340,7 +402,7 @@ export const saveWithFiles = action({
 
       // 2) Upload only truly new files (ids not already stored)
       const filesToUpload: Record<string, ExcalidrawFileData> = {}
-      for (const [fileId, fileData] of Object.entries(incomingFiles)) {
+      for (const [fileId, fileData] of incomingFileEntries) {
         if (!existingFiles[fileId]) {
           filesToUpload[fileId] = fileData
         }
@@ -394,8 +456,8 @@ export const saveWithFiles = action({
 
     await ctx.runMutation(api.drawings.save, {
       drawingId: args.drawingId,
-      elements: args.elements,
-      appState: args.appState,
+      elements: args.elements === null ? null : [...args.elements],
+      appState: args.appState ?? null,
       files: newFileMap ?? existing?.files ?? undefined
     })
 
@@ -536,6 +598,27 @@ export const listShared = query({
       return []
     }
 
+    const uniqueDrawingIds = [
+      ...new Set(collaboratorEntries.map((entry) => entry.drawingId))
+    ]
+    const drawingResults = await Promise.all(
+      uniqueDrawingIds.map(async (drawingId) => {
+        const drawing = await ctx.db
+          .query("drawings")
+          .withIndex("by_drawingId", (q) => q.eq("drawingId", drawingId))
+          .first()
+
+        return drawing && drawing.isActive !== false
+          ? [drawingId, drawing]
+          : null
+      })
+    )
+    const drawingsById = new Map(
+      drawingResults.filter(
+        (entry): entry is [string, Doc<"drawings">] => entry !== null
+      )
+    )
+
     const sharedDrawings: Array<{
       _id: Id<"drawings">
       _creationTime: number
@@ -544,13 +627,9 @@ export const listShared = query({
       folderId?: string
     }> = []
 
-    for (const entry of collaboratorEntries) {
-      const drawing = await ctx.db
-        .query("drawings")
-        .withIndex("by_drawingId", (q) => q.eq("drawingId", entry.drawingId))
-        .first()
-
-      if (!drawing || drawing.isActive === false) {
+    for (const drawingId of uniqueDrawingIds) {
+      const drawing = drawingsById.get(drawingId)
+      if (!drawing) {
         continue
       }
 
@@ -602,19 +681,26 @@ export const listCollaborators = query({
       .withIndex("by_drawingId", (q) => q.eq("drawingId", args.drawingId))
       .collect()
 
-    const results = []
-    for (const entry of collaborators) {
-      const userDoc = await ctx.db.get(entry.collaboratorUserId as Id<"users">)
-      const user = userDoc as Doc<"users"> | null
-      results.push({
+    const uniqueCollaboratorIds = [
+      ...new Set(collaborators.map((entry) => entry.collaboratorUserId))
+    ]
+    const userResults = await Promise.all(
+      uniqueCollaboratorIds.map(async (collaboratorUserId) => {
+        const userDoc = await ctx.db.get(collaboratorUserId as Id<"users">)
+        return [collaboratorUserId, userDoc as Doc<"users"> | null] as const
+      })
+    )
+    const usersById = new Map(userResults)
+
+    return collaborators.map((entry) => {
+      const user = usersById.get(entry.collaboratorUserId) ?? null
+      return {
         collaboratorUserId: entry.collaboratorUserId,
         email: user?.email,
         name: user?.name,
         addedByUserId: entry.addedByUserId
-      })
-    }
-
-    return results
+      }
+    })
   }
 })
 
