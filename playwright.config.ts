@@ -6,7 +6,7 @@ const useExistingServer = process.env.PLAYWRIGHT_USE_EXISTING_SERVER === "1"
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
-  testMatch: /.*\.spec\.ts$/,
+  testMatch: /.*\.playwright\.ts$/,
   testDir: "./e2e-playwright",
   /* Run tests in files in parallel */
   fullyParallel: true,
